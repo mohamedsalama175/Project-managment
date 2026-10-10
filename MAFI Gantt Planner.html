@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MAFI Gantt Planner</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f7f4;--panel:#fff;--ink:#1d2b2a;--mut:#6b7876;--line:#dfe4e1;--wk:#f0f2ef;--bar:#1f7a6d;--bar2:#a9d8cf;--today:#d64545;--accent:#1f7a6d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121816;--panel:#1a2321;--ink:#e6efed;--mut:#8fa09d;--line:#2b3735;--wk:#1f2a28;--bar:#3fb5a3;--bar2:#2a5750;--today:#ff6b6b;--accent:#3fb5a3}}
+:root[data-theme="dark"]{--bg:#121816;--panel:#1a2321;--ink:#e6efed;--mut:#8fa09d;--line:#2b3735;--wk:#1f2a28;--bar:#3fb5a3;--bar2:#2a5750;--today:#ff6b6b;--accent:#3fb5a3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:16px 20px}
+h1{font-size:20px;margin:0;font-weight:650}
+.sub{color:var(--mut);font-size:13px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:6px;cursor:pointer}
+button.p{background:var(--accent);border-color:var(--accent);color:#fff}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.wrap{margin:0 20px 20px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow-x:auto}
+.row{display:flex;min-width:max-content;border-bottom:1px solid var(--line)}
+.left{position:sticky;left:0;z-index:3;background:var(--panel);display:grid;grid-template-columns:28px 210px 118px 118px 52px 30px;gap:6px;align-items:center;padding:5px 8px;border-right:1px solid var(--line);flex:none}
+.left input{width:100%;font:inherit;color:var(--ink);background:transparent;border:1px solid transparent;border-radius:4px;padding:4px}
+.left input:hover{border-color:var(--line)}
+.left .n{color:var(--mut);text-align:center}
+.left .x{border:0;background:none;color:var(--mut);padding:2px;font-size:16px}
+.hd .left{font-weight:600;color:var(--mut);font-size:12px}
+.tl{position:relative;flex:none}
+.months,.days{display:flex}
+.m{border-right:1px solid var(--line);padding:2px 6px;font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden}
+.d{text-align:center;font-size:10px;color:var(--mut);border-right:1px solid var(--line);flex:none;padding:2px 0}
+.d.we,.c.we{background:var(--wk)}
+.cells{position:absolute;inset:0;display:flex}
+.c{flex:none;border-right:1px solid var(--line);opacity:.6}
+.bar{position:absolute;top:8px;height:22px;border-radius:5px;background:var(--bar2);overflow:hidden;box-shadow:inset 0 0 0 1px var(--bar)}
+.bar i{display:block;height:100%;background:var(--bar)}
+.bar span{position:absolute;left:6px;top:3px;font-size:11px;color:var(--ink);white-space:nowrap;text-shadow:0 0 3px var(--panel)}
+.today{position:absolute;top:0;bottom:0;width:2px;background:var(--today);z-index:2}
+.body .tl{height:38px}
+.bad{background:rgba(214,69,69,.08)}
+.foot{padding:0 20px 18px;color:var(--mut);font-size:12px}
+input[type=range]{width:110px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>MAFI Gantt Planner</h1><div class="sub">Edit any date, progress or name and the chart updates. Add tasks with the button.</div></div>
+  <div class="tools">
+    <label class="sub">Zoom <input type="range" id="zoom" min="10" max="48" value="22" aria-label="Zoom"></label>
+    <button id="add" class="p">+ Add task</button>
+    <button id="reset">Reset</button>
+  </div>
+</header>
+<div class="wrap" id="wrap"></div>
+<div class="foot" id="foot"></div>
+<script>
+var KEY="mafi-gantt-v1";
+var DEF=[
+["Scale application done on MAFI server","2026-10-04","2026-10-15"],
+["Make a simulator for the scale","2026-10-04","2026-10-11"],
+["Add supplier site field","2026-10-12","2026-10-15"],
+["Add PO type","2026-10-12","2026-10-18"],
+["Add PO reference","2026-10-16","2026-10-20"],
+["Add order number","2026-10-16","2026-10-20"],
+["Remaining quantity","2026-10-19","2026-10-25"],
+["Inventory organization","2026-10-19","2026-10-25"],
+["Add post test flow","2026-10-26","2026-11-01"],
+["Block reasons CRUD (truck, driver)","2026-10-26","2026-11-01"],
+["Direct PO flow","2026-11-02","2026-11-12"],
+["Blanket PO flow","2026-11-08","2026-11-19"],
+["Contract PO flow","2026-11-15","2026-11-26"],
+["Queue management module","2026-11-02","2026-11-30"]
+].map(function(t,i){return{id:i+1,name:t[0],start:t[1],end:t[2],pct:0}});
+var tasks=load(),nid=tasks.length?Math.max.apply(null,tasks.map(function(t){return t.id}))+1:1;
+function load(){try{var s=localStorage.getItem(KEY);if(s)return JSON.parse(s)}catch(e){}return JSON.parse(JSON.stringify(DEF))}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(tasks))}catch(e){}}
+var DAY=864e5;
+function P(s){var a=s.split("-");return Date.UTC(+a[0],+a[1]-1,+a[2])}
+function F(ms){return new Date(ms).toISOString().slice(0,10)}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;")}
+var MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function render(){
+  var dw=+document.getElementById("zoom").value;
+  var valid=tasks.filter(function(t){return t.start&&t.end&&P(t.end)>=P(t.start)});
+  var now=P(F(Date.now()));
+  var lo=valid.length?Math.min.apply(null,valid.map(function(t){return P(t.start)})):now;
+  var hi=valid.length?Math.max.apply(null,valid.map(function(t){return P(t.end)})):now+14*DAY;
+  lo-=2*DAY;hi+=3*DAY;
+  var n=Math.round((hi-lo)/DAY)+1,W=n*dw;
+  var mh="",dh="",cells="",cur=-1,span=0,label="";
+  for(var i=0;i<n;i++){
+    var d=new Date(lo+i*DAY),m=d.getUTCFullYear()*12+d.getUTCMonth(),dow=d.getUTCDay(),we=(dow==5||dow==6)?" we":"";
+    if(m!==cur){if(cur>=0)mh+='<div class="m" style="width:'+span*dw+'px">'+label+'</div>';cur=m;span=0;label=MN[d.getUTCMonth()]+" "+d.getUTCFullYear()}
+    span++;
+    dh+='<div class="d'+we+'" style="width:'+dw+'px">'+(dw>=16?d.getUTCDate():"")+'</div>';
+    cells+='<div class="c'+we+'" style="width:'+dw+'px"></div>';
+  }
+  mh+='<div class="m" style="width:'+span*dw+'px">'+label+'</div>';
+  var tl=now>=lo&&now<=hi?'<div class="today" style="left:'+((now-lo)/DAY*dw+dw/2)+'px" title="Today"></div>':"";
+  var h='<div class="row hd"><div class="left"><span></span><span>Task</span><span>Start</span><span>End</span><span>%</span><span></span></div><div class="tl" style="width:'+W+'px"><div class="months">'+mh+'</div><div class="days">'+dh+'</div>'+tl.replace("bottom:0","")+'</div></div><div class="body">';
+  tasks.forEach(function(t,i){
+    var ok=t.start&&t.end&&P(t.end)>=P(t.start),bar="";
+    if(ok){var x=(P(t.start)-lo)/DAY*dw,w=((P(t.end)-P(t.start))/DAY+1)*dw;
+      bar='<div class="bar" style="left:'+x+'px;width:'+w+'px" title="'+esc(t.name)+': '+t.start+' to '+t.end+'"><i style="width:'+t.pct+'%"></i>'+(w>90?'<span>'+((P(t.end)-P(t.start))/DAY+1)+'d</span>':'')+'</div>'}
+    h+='<div class="row'+(ok?'':' bad')+'" data-i="'+i+'"><div class="left"><span class="n">'+(i+1)+'</span>'+
+      '<input data-f="name" value="'+esc(t.name)+'" aria-label="Task name">'+
+      '<input type="date" data-f="start" value="'+t.start+'" aria-label="Start date">'+
+      '<input type="date" data-f="end" value="'+t.end+'" aria-label="End date">'+
+      '<input type="number" min="0" max="100" data-f="pct" value="'+t.pct+'" aria-label="Percent done">'+
+      '<button class="x" data-del="1" aria-label="Delete task">&times;</button></div>'+
+      '<div class="tl" style="width:'+W+'px"><div class="cells">'+cells+'</div>'+bar+(tl?tl.replace("top:0",""):"")+'</div></div>';
+  });
+  h+='</div>';
+  document.getElementById("wrap").innerHTML=h;
+  var total=valid.length?Math.round((hi-lo)/DAY)-4:0;
+  var done=tasks.length?Math.round(tasks.reduce(function(a,t){return a+(+t.pct||0)},0)/tasks.length):0;
+  document.getElementById("foot").textContent=tasks.length+" tasks · "+total+" calendar days from first start to last end · "+done+"% overall done · Fri/Sat shaded · red line = today"+(valid.length<tasks.length?" · Rows shaded red have an end date before the start date.":"");
+}
+var wrap=document.getElementById("wrap");
+wrap.addEventListener("change",function(e){
+  var r=e.target.closest(".row");if(!r||e.target.dataset.f===undefined)return;
+  var t=tasks[+r.dataset.i],f=e.target.dataset.f,v=e.target.value;
+  if(f==="pct"){v=Math.max(0,Math.min(100,+v||0))}
+  t[f]=v;
+  if((f==="start")&&t.end&&P(t.end)<P(v)){t.end=v}
+  save();render();
+});
+wrap.addEventListener("click",function(e){
+  if(!e.target.dataset.del)return;
+  tasks.splice(+e.target.closest(".row").dataset.i,1);save();render();
+});
+document.getElementById("add").onclick=function(){
+  var last=tasks.length?tasks[tasks.length-1].end:F(P(F(Date.now())));
+  var s=last||F(P(F(Date.now())));
+  tasks.push({id:nid++,name:"New task",start:s,end:F(P(s)+6*DAY),pct:0});
+  save();render();
+  var ins=wrap.querySelectorAll('input[data-f="name"]');var l=ins[ins.length-1];l.focus();l.select();
+};
+document.getElementById("reset").onclick=function(){
+  if(confirm("Reset to the original 14 tasks? Your edits will be lost.")){tasks=JSON.parse(JSON.stringify(DEF));nid=tasks.length+1;save();render()}
+};
+document.getElementById("zoom").oninput=render;
+render();
+</script>
+</body>
+</html>
