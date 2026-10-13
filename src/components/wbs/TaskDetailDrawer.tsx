@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   User,
@@ -16,6 +16,11 @@ import {
   ChevronRight,
   Plus,
   Users,
+  Eye,
+  EyeOff,
+  Paperclip,
+  Activity,
+  Sparkles,
 } from 'lucide-react';
 import {
   Task,
@@ -25,9 +30,18 @@ import {
   TaskEffortAllocation,
 } from '../../types';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { apiClient, ApiTaskComment, ApiCommentUser } from '../../api/client';
+import { CommentComposer } from '../collaboration/CommentComposer';
+import { CommentThread } from '../collaboration/CommentThread';
+import { ActivityFeed } from '../collaboration/ActivityFeed';
+import { TaskAttachmentsList } from '../attachments/TaskAttachmentsList';
 import { ClayButton } from '../common/ClayButton';
+import { EmptyState } from '../common/EmptyState';
 import { getTodayUTC, diffCalendarDays } from '../../utils/dateUtils';
 import { isTaskEntirelyNonWorkingDays } from '../../utils/capacityUtils';
+import { AiSuggestionCard } from '../ai/AiSuggestionCard';
+import { aiApi, TaskEstimationResponse } from '../../api/ai';
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -53,8 +67,13 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
     auditLogs,
     activePersonaId,
   } = useProjectStore();
+  const { user } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'attachments' | 'activity' | 'history'>('details');
+  const [backendComments, setBackendComments] = useState<ApiTaskComment[]>([]);
+  const [isWatching, setIsWatching] = useState(false);
+  const [isTogglingWatch, setIsTogglingWatch] = useState(false);
+  const [isLoadingBackendComments, setIsLoadingBackendComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -67,9 +86,80 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   const [isBlockerPromptOpen, setIsBlockerPromptOpen] = useState(false);
   const [blockerReasonInput, setBlockerReasonInput] = useState('');
 
-  if (!isOpen || !task) return null;
+  // AI Estimation
+  const [aiEstimation, setAiEstimation] = useState<TaskEstimationResponse | null>(null);
+  const [isEstimating, setIsEstimating] = useState(false);
+
+  const handleRequestAiEstimate = async () => {
+    if (!task) return;
+    setIsEstimating(true);
+    try {
+      const res = await aiApi.estimateTask({
+        name: task.name,
+        category: task.category,
+        project_id: project?.id,
+        description: `${task.category} task: ${task.name}`,
+      });
+      setAiEstimation(res);
+    } catch (err: any) {
+      alert(`AI estimation failed: ${err.message}`);
+    } finally {
+      setIsEstimating(false);
+    }
+  };
 
   const project = projects.find((p) => p.id === activeProjectId) || projects[0];
+
+  useEffect(() => {
+    if (isOpen && task && project) {
+      loadBackendComments();
+      checkWatcherStatus();
+    }
+  }, [isOpen, task?.id, project?.id]);
+
+  const loadBackendComments = async () => {
+    if (!project || !task) return;
+    setIsLoadingBackendComments(true);
+    try {
+      const res = await apiClient.getTaskComments(project.id, task.id);
+      setBackendComments(res.data);
+    } catch (err) {
+      console.error('Failed to load comments', err);
+    } finally {
+      setIsLoadingBackendComments(false);
+    }
+  };
+
+  const checkWatcherStatus = async () => {
+    if (!project || !task) return;
+    try {
+      const res = await apiClient.getTaskWatchers(project.id, task.id);
+      setIsWatching(res.is_watching);
+    } catch {
+      // Non-blocking
+    }
+  };
+
+  const handleToggleWatch = async () => {
+    if (!project || !task || isTogglingWatch) return;
+    setIsTogglingWatch(true);
+    try {
+      if (isWatching) {
+        await apiClient.unwatchTask(project.id, task.id);
+        setIsWatching(false);
+      } else {
+        await apiClient.watchTask(project.id, task.id);
+        setIsWatching(true);
+      }
+    } catch (err) {
+      console.error('Failed to toggle watch status', err);
+    } finally {
+      setIsTogglingWatch(false);
+    }
+  };
+
+  if (!isOpen || !task) return null;
+
   const comments = taskComments[task.id] || [];
   const taskAudits = auditLogs.filter((a) => a.taskId === task.id);
 
@@ -168,12 +258,29 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleToggleWatch}
+              disabled={isTogglingWatch}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
+                isWatching
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700 shadow-xs'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+              }`}
+              title={isWatching ? 'Stop watching this task' : 'Watch this task for updates'}
+            >
+              {isWatching ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span>{isWatching ? 'Watching' : 'Watch'}</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Task Title & Status Bar */}
@@ -311,10 +418,10 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
           )}
 
           {/* Navigation Sub-Tabs */}
-          <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-200/50 dark:border-slate-800 text-xs font-bold">
+          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-slate-200/50 dark:border-slate-800 text-xs font-bold overflow-x-auto">
             <button
               onClick={() => setActiveTab('details')}
-              className={`pb-1 border-b-2 transition-colors ${
+              className={`pb-1 border-b-2 whitespace-nowrap transition-colors ${
                 activeTab === 'details'
                   ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
                   : 'border-transparent text-slate-400 hover:text-slate-600'
@@ -324,26 +431,50 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('comments')}
-              className={`pb-1 border-b-2 transition-colors flex items-center gap-1.5 ${
+              className={`pb-1 border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                 activeTab === 'comments'
                   ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
                   : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}
             >
+              <MessageSquare className="w-3.5 h-3.5" />
               <span>Discussion</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800">
-                {comments.length}
+                {backendComments.length}
               </span>
             </button>
             <button
+              onClick={() => setActiveTab('attachments')}
+              className={`pb-1 border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                activeTab === 'attachments'
+                  ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+              <span>Attachments</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`pb-1 border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                activeTab === 'activity'
+                  ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>Activity</span>
+            </button>
+            <button
               onClick={() => setActiveTab('history')}
-              className={`pb-1 border-b-2 transition-colors flex items-center gap-1.5 ${
+              className={`pb-1 border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                 activeTab === 'history'
                   ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
                   : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}
             >
-              <span>Audit Trail</span>
+              <History className="w-3.5 h-3.5" />
+              <span>Audit</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800">
                 {taskAudits.length}
               </span>
@@ -440,6 +571,31 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                   </div>
                 )}
 
+                {/* AI Effort Estimation Suggestion */}
+                <div className="pt-2">
+                  {aiEstimation ? (
+                    <AiSuggestionCard
+                      estimation={aiEstimation}
+                      currentHours={task.estimatedHours}
+                      onApply={(hours: number) => {
+                        updateTask(task.id, { estimatedHours: hours });
+                        setAiEstimation(null);
+                      }}
+                      onDismiss={() => setAiEstimation(null)}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRequestAiEstimate}
+                      disabled={isEstimating}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-dashed border-indigo-300 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/50 dark:hover:bg-indigo-950/40 transition-colors"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 text-indigo-500 ${isEstimating ? 'animate-spin' : ''}`} />
+                      <span>{isEstimating ? 'Consulting AI Estimation Model...' : 'Suggest Effort with AI'}</span>
+                    </button>
+                  )}
+                </div>
+
                 {/* Reviewer */}
                 <div className="pt-2">
                   <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
@@ -502,86 +658,103 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             </div>
           )}
 
-          {/* Discussion Tab (Comments Feed) */}
+          {/* Discussion Tab (Phase 4 Threaded Discussions & Mentions) */}
           {activeTab === 'comments' && (
             <div className="space-y-4">
-              <form onSubmit={handleAddComment} className="space-y-2">
-                <textarea
-                  rows={3}
-                  placeholder="Add an internal note or update about this task..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  className="w-full text-xs p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 shadow-inner"
-                />
-                <div className="flex justify-end">
-                  <ClayButton
-                    size="sm"
-                    variant="primary"
-                    type="submit"
-                    icon={<Send className="w-3.5 h-3.5" />}
-                    disabled={!commentText.trim()}
-                  >
-                    Post Comment
-                  </ClayButton>
-                </div>
-              </form>
+              <CommentComposer
+                projectId={project.id}
+                taskId={task.id}
+                projectMembers={(teamMembers || []).map((m) => ({
+                  id: m.id,
+                  name: m.name,
+                  email: m.email,
+                  avatar_url: m.avatar,
+                }))}
+                onCommentCreated={(newComment) => {
+                  setBackendComments((prev) => [newComment, ...prev]);
+                }}
+              />
 
-              <div className="space-y-3 pt-2">
-                {comments.length === 0 ? (
-                  <div className="text-center py-8 text-xs text-slate-400">
-                    No comments yet. Start the conversation!
+              <div className="space-y-1 pt-2">
+                {isLoadingBackendComments ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    Loading discussion...
                   </div>
+                ) : backendComments.length === 0 ? (
+                  <EmptyState
+                    compact
+                    icon={<MessageSquare className="w-5 h-5 text-emerald-500" />}
+                    title="No Discussion Yet"
+                    description="Post updates, mention teammates with @[Name], and react to comments."
+                  />
                 ) : (
-                  comments.map((c) => (
-                    <div
-                      key={c.id}
-                      className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs shadow-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-200">
-                          {c.authorAvatar ? (
-                            <img
-                              src={c.authorAvatar}
-                              alt={c.authorName}
-                              className="w-4 h-4 rounded-full object-cover"
-                            />
-                          ) : (
-                            <span className="w-4 h-4 rounded-full bg-slate-700 text-[8px] font-bold text-white flex items-center justify-center">
-                              {c.authorName.substring(0, 1)}
-                            </span>
-                          )}
-                          <span>{c.authorName}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-400">
-                            {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <button
-                            onClick={() => deleteTaskComment(c.id, task.id)}
-                            className="text-slate-400 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
-                        {c.content}
-                      </p>
-                    </div>
-                  ))
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {backendComments.map((c) => (
+                      <CommentThread
+                        key={c.id}
+                        projectId={project.id}
+                        taskId={task.id}
+                        comment={c}
+                        currentUserId={user?.id || activePersonaId}
+                        projectMembers={(teamMembers || []).map((m) => ({
+                          id: m.id,
+                          name: m.name,
+                          email: m.email,
+                          avatar_url: m.avatar,
+                        }))}
+                        onCommentUpdated={(updated) => {
+                          setBackendComments((prev) =>
+                            prev.map((item) => (item.id === updated.id ? updated : item))
+                          );
+                        }}
+                        onCommentDeleted={(deletedId) => {
+                          setBackendComments((prev) =>
+                            prev.map((item) =>
+                              item.id === deletedId
+                                ? { ...item, is_tombstone: true, content: '[deleted]', user: null }
+                                : item
+                            )
+                          );
+                        }}
+                        onReplyAdded={(reply) => {
+                          setBackendComments((prev) =>
+                            prev.map((item) => {
+                              if (item.id === reply.parent_comment_id) {
+                                const existingReplies = item.replies || [];
+                                return { ...item, replies: [...existingReplies, reply] };
+                              }
+                              return item;
+                            })
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
+          )}
+
+          {/* Attachments Tab (Phase 4 Security & ClamAV Gated Uploads) */}
+          {activeTab === 'attachments' && (
+            <TaskAttachmentsList projectId={project.id} taskId={task.id} />
+          )}
+
+          {/* Activity Feed Tab (Phase 4 Append-Only Activity Log) */}
+          {activeTab === 'activity' && (
+            <ActivityFeed projectId={project.id} taskId={task.id} />
           )}
 
           {/* Audit Trail Tab */}
           {activeTab === 'history' && (
             <div className="space-y-3">
               {taskAudits.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400">
-                  No audit log entries recorded for this task.
-                </div>
+                <EmptyState
+                  compact
+                  icon={<History className="w-5 h-5 text-slate-400" />}
+                  title="Audit Trail Empty"
+                  description="All future date changes, status moves, assignee edits, and sign-offs will be tracked here."
+                />
               ) : (
                 taskAudits.map((a) => (
                   <div

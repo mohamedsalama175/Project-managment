@@ -10,7 +10,9 @@
 import { Project, TeamMember, Task, TaskEffortAllocation } from '../types';
 import { dbSaveSnapshot } from '../db/projectDB';
 
-export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
+export const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+
+const DEMO_TEAM_MEMBERS: TeamMember[] = [
   {
     id: 'member-ahmed-khalil',
     name: 'Ahmed Khalil',
@@ -96,6 +98,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     createdAt: '2026-09-01T08:00:00Z',
   },
 ];
+
+export const INITIAL_TEAM_MEMBERS: TeamMember[] = isDemoMode ? DEMO_TEAM_MEMBERS : [];
 
 /** Matches legacy assignee text against known team member names (e.g., "Ahmed K." -> Ahmed Khalil) */
 export function matchTeamMemberByName(

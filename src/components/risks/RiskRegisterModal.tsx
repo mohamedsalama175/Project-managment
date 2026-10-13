@@ -22,6 +22,7 @@ import {
 } from '../../types';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { ClayButton } from '../common/ClayButton';
+import { EmptyState } from '../common/EmptyState';
 import { getTodayUTC } from '../../utils/dateUtils';
 
 interface RiskRegisterModalProps {
@@ -517,13 +518,27 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
 
           {/* Risks Cards List */}
           {filteredRisks.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 text-xs">
-              <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-emerald-500/50" />
-              <div className="font-bold text-sm text-slate-600 dark:text-slate-300">
-                No entries match the current filter
+            risks.length === 0 ? (
+              <EmptyState
+                compact
+                icon={<ShieldAlert className="w-6 h-6 text-emerald-500" />}
+                title="Zero Delivery Impediments"
+                description="No risks, issues, or blockers have been registered for this project yet. Proactively log uncertainties to track root cause and accountability."
+                primaryAction={{
+                  label: 'Log New Risk / Blocker',
+                  onClick: () => setIsFormOpen(true),
+                  icon: <Plus className="w-4 h-4" />,
+                }}
+              />
+            ) : (
+              <div className="text-center py-12 text-slate-400 text-xs">
+                <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-emerald-500/50" />
+                <div className="font-bold text-sm text-slate-600 dark:text-slate-300">
+                  No entries match the current filter
+                </div>
+                <div>Project delivery is operating with zero registered delivery impediments for this filter.</div>
               </div>
-              <div>Project delivery is operating with zero registered delivery impediments.</div>
-            </div>
+            )
           ) : (
             <div className="space-y-3">
               {filteredRisks.map((risk) => {

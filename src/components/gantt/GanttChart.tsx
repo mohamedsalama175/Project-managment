@@ -5,6 +5,7 @@ import { GanttBar } from './GanttBar';
 import { BaselineBar } from './BaselineBar';
 import { DependencyCurves } from './DependencyCurves';
 import { diffCalendarDays, getTodayUTC, isWeekendDay } from '../../utils/dateUtils';
+import { EmptyState } from '../common/EmptyState';
 
 interface GanttChartProps {
   tasks: Task[];
@@ -125,37 +126,47 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           />
 
           {/* Task Rows & Bars */}
-          {tasks.map((task, idx) => (
-            <div
-              key={task.id}
-              style={{
-                height: `${rowHeight}px`,
-                top: `${idx * rowHeight}px`,
-              }}
-              className="absolute left-0 right-0 border-b border-slate-200/30 dark:border-slate-800/30 hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors"
-            >
-              {/* Baseline Ghost Bar */}
-              {hasLockedBaseline && (
-                <BaselineBar
+          {tasks.length === 0 ? (
+            <div className="flex items-center justify-center p-12">
+              <EmptyState
+                compact
+                title="No Tasks to Visualize"
+                description="Schedule tasks in the Work Breakdown Structure to project them on the Gantt timeline."
+              />
+            </div>
+          ) : (
+            tasks.map((task, idx) => (
+              <div
+                key={task.id}
+                style={{
+                  height: `${rowHeight}px`,
+                  top: `${idx * rowHeight}px`,
+                }}
+                className="absolute left-0 right-0 border-b border-slate-200/30 dark:border-slate-800/30 hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors"
+              >
+                {/* Baseline Ghost Bar */}
+                {hasLockedBaseline && (
+                  <BaselineBar
+                    task={task}
+                    timelineStart={timelineStart}
+                    dayWidth={dayWidth}
+                  />
+                )}
+
+                {/* Main Interactive Gantt Bar */}
+                <GanttBar
                   task={task}
                   timelineStart={timelineStart}
                   dayWidth={dayWidth}
+                  rowHeight={rowHeight}
+                  isCritical={criticalTaskIds.has(task.id)}
+                  highlightCritical={highlightCritical}
+                  categories={categories}
+                  todayStr={todayStr}
                 />
-              )}
-
-              {/* Main Interactive Gantt Bar */}
-              <GanttBar
-                task={task}
-                timelineStart={timelineStart}
-                dayWidth={dayWidth}
-                rowHeight={rowHeight}
-                isCritical={criticalTaskIds.has(task.id)}
-                highlightCritical={highlightCritical}
-                categories={categories}
-                todayStr={todayStr}
-              />
-            </div>
-          ))}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

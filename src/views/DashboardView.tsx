@@ -12,11 +12,14 @@ import {
   AlertOctagon,
   User,
   Building,
+  Sparkles,
 } from 'lucide-react';
 import { useProjectStore } from '../stores/useProjectStore';
 import { ClayCard } from '../components/common/ClayCard';
 import { ClayButton } from '../components/common/ClayButton';
+import { EmptyState } from '../components/common/EmptyState';
 import { NewProjectModal } from '../components/layout/NewProjectModal';
+import { TemplatePickerModal } from '../components/templates/TemplatePickerModal';
 import { Modal } from '../components/common/Modal';
 import { getTodayUTC } from '../utils/dateUtils';
 import { Project, Task } from '../types';
@@ -33,6 +36,7 @@ export const DashboardView: React.FC = () => {
   } = useProjectStore();
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | 'client' | 'internal'>('all');
 
@@ -66,13 +70,22 @@ export const DashboardView: React.FC = () => {
           </p>
         </div>
 
-        <ClayButton
-          variant="primary"
-          icon={<Plus className="w-4 h-4" />}
-          onClick={() => setIsNewModalOpen(true)}
-        >
-          Create New Project
-        </ClayButton>
+        <div className="flex items-center gap-2">
+          <ClayButton
+            variant="default"
+            icon={<Sparkles className="w-4 h-4 text-emerald-500" />}
+            onClick={() => setIsTemplatePickerOpen(true)}
+          >
+            Browse Templates
+          </ClayButton>
+          <ClayButton
+            variant="primary"
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => setIsNewModalOpen(true)}
+          >
+            Create New Project
+          </ClayButton>
+        </div>
       </div>
 
       {/* Classification Filter Tabs */}
@@ -92,8 +105,28 @@ export const DashboardView: React.FC = () => {
         ))}
       </div>
 
-      {/* Grid of Projects */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {filteredProjects.length === 0 ? (
+        <EmptyState
+          title={typeFilter === 'all' ? 'No Projects in Workspace' : `No ${typeFilter} projects found`}
+          description={
+            projects.length === 0
+              ? "You haven't initialized any project schedules yet. Create a blank project or instantiate one of our pre-built system templates."
+              : 'No projects match the selected portfolio filter. Switch filters or create a new project.'
+          }
+          primaryAction={{
+            label: 'Create New Project',
+            onClick: () => setIsNewModalOpen(true),
+            icon: <Plus className="w-4 h-4" />,
+          }}
+          secondaryAction={{
+            label: 'Browse System Templates',
+            onClick: () => setIsTemplatePickerOpen(true),
+            icon: <Sparkles className="w-4 h-4 text-emerald-500" />,
+          }}
+        />
+      ) : (
+        /* Grid of Projects */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredProjects.map((proj: Project) => {
           const isActive = proj.id === activeProjectId;
           const tasks = proj.tasks || [];
@@ -275,6 +308,7 @@ export const DashboardView: React.FC = () => {
           </div>
         </button>
       </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <Modal
@@ -305,6 +339,12 @@ export const DashboardView: React.FC = () => {
       <NewProjectModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
+      />
+
+      {/* Template Picker Modal */}
+      <TemplatePickerModal
+        isOpen={isTemplatePickerOpen}
+        onClose={() => setIsTemplatePickerOpen(false)}
       />
     </div>
   );

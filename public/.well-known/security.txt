@@ -1,0 +1,8 @@
+Contact: mailto:security@deliverops.com
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: en, ar
+Canonical: https://app.deliverops.com/.well-known/security.txt
+Policy: https://deliverops.com/security-policy
+Hiring: https://deliverops.com/careers
+Acknowledgments: https://deliverops.com/hall-of-fame
+CSAF: https://deliverops.com/.well-known/csaf/provider-metadata.json

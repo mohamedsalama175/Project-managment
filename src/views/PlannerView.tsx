@@ -20,6 +20,7 @@ import {
 import { Task, Project, TaskCPMInfo } from '../types';
 import { SortConfig, sortTasks } from '../utils/sortUtils';
 import { TaskFilters, filterTasks, INITIAL_FILTERS } from '../utils/filterUtils';
+import { EmptyState } from '../components/common/EmptyState';
 
 export const PlannerView: React.FC = () => {
   const {
@@ -198,7 +199,16 @@ export const PlannerView: React.FC = () => {
 
   if (!activeProject) {
     return (
-      <div className="p-8 text-center text-slate-500">No project selected.</div>
+      <div className="flex-1 flex items-center justify-center p-8 h-full">
+        <EmptyState
+          title="No Project Selected"
+          description="Select an existing project or create a new delivery schedule to start planning with WBS and Gantt."
+          primaryAction={{
+            label: 'Go to Dashboard',
+            onClick: () => useProjectStore.getState().setActiveView('dashboard'),
+          }}
+        />
+      </div>
     );
   }
 
@@ -280,6 +290,7 @@ export const PlannerView: React.FC = () => {
 
           {/* Critical Path Toggle Button */}
           <button
+            id="planner-critical-path-btn"
             type="button"
             onClick={() =>
               updateProjectConfig({
@@ -339,6 +350,7 @@ export const PlannerView: React.FC = () => {
       >
         {/* Left WBS Table Pane */}
         <div
+          id="planner-wbs-container"
           style={{ width: undefined }}
           className={`h-full overflow-hidden flex-col ${
             mobileMode === 'table' ? 'flex w-full md:w-auto' : 'hidden md:flex'
@@ -384,6 +396,7 @@ export const PlannerView: React.FC = () => {
 
         {/* Right Interactive Gantt Chart Canvas Pane */}
         <div
+          id="planner-gantt-container"
           className={`flex-col h-full overflow-hidden min-w-[300px] flex-1 ${
             mobileMode === 'timeline' ? 'flex w-full' : 'hidden md:flex'
           }`}

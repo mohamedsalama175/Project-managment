@@ -1,0 +1,1234 @@
+openapi: 3.1.0
+info:
+  title: DeliverOps Enterprise Delivery & CPM Scheduling Platform API
+  version: 5.0.0
+  description: |
+    Production REST API specification for DeliverOps: an enterprise project delivery,
+    Critical Path Method (CPM) scheduling, resource leveling, and risk governance platform.
+servers:
+  - url: http://127.0.0.1:8000/api/v1
+    description: Local Development & Staging Server
+  - url: https://api.deliverops.internal/v1
+    description: Production Enterprise Gateway
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ============================================================================
+  # 1. AUTHENTICATION & SESSION
+  # ============================================================================
+  /auth/login:
+    post:
+      summary: Authenticate user & obtain Sanctum personal access token
+      operationId: login
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@deliverops.com
+                password:
+                  type: string
+                  format: password
+                  example: AdminPassword2026!
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, example: "8|MnzypdyUhPpvMGvs6CB3XmEH5X0U1NYj..." }
+                  user: { $ref: '#/components/schemas/User' }
+                  permissions: { type: array, items: { type: string } }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout:
+    post:
+      summary: Invalidate current access token
+      operationId: logout
+      tags: [Authentication]
+      responses:
+        '200':
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: "Logged out successfully." }
+
+  /auth/me:
+    get:
+      summary: Retrieve authenticated user profile and workload capacity summary
+      operationId: getMe
+      tags: [Authentication]
+      responses:
+        '200':
+          description: Current authenticated profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  permissions: { type: array, items: { type: string } }
+                  workloadSummary:
+                    type: object
+                    properties:
+                      activeTasksCount: { type: integer, example: 3 }
+                      weeklyCapacityHours: { type: number, example: 40.0 }
+
+  /auth/password/change:
+    post:
+      summary: Change password & revoke all other active sessions
+      operationId: changePassword
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password, new_password_confirmation]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+                new_password_confirmation: { type: string }
+      responses:
+        '200':
+          description: Password updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: "Password updated successfully." }
+
+  # ============================================================================
+  # 2. USERS & IDENTITY
+  # ============================================================================
+  /users:
+    get:
+      summary: List users with capacity metrics & department filtering
+      operationId: listUsers
+      tags: [Users]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: department
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, on_leave, inactive] }
+        - name: role
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        '200':
+          description: Paginated users directory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsers'
+    post:
+      summary: Provision new user account
+      operationId: createUser
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /users/{id}:
+    get:
+      summary: Retrieve single user profile by ULID
+      operationId: getUser
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+    put:
+      summary: Update user profile, capacity, or role assignments
+      operationId: updateUser
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Updated user profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      summary: Soft-delete user (enforces last-admin & self-deletion guards)
+      operationId: deleteUser
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: User deleted successfully
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ============================================================================
+  # 3. ROLES & PERMISSIONS
+  # ============================================================================
+  /permissions:
+    get:
+      summary: Retrieve grouped permissions matrix
+      operationId: listPermissions
+      tags: [Access Control]
+      responses:
+        '200':
+          description: Grouped permissions list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object }
+
+  /roles:
+    get:
+      summary: List roles with assigned user counts and permissions
+      operationId: listRoles
+      tags: [Access Control]
+      responses:
+        '200':
+          description: Roles catalogue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Role' } }
+    post:
+      summary: Create custom role
+      operationId: createRole
+      tags: [Access Control]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, display_name]
+              properties:
+                name: { type: string, example: qa_lead }
+                display_name: { type: string, example: "QA Lead Engineer" }
+                description: { type: string }
+                permissions: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Role created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+
+  /roles/{id}:
+    put:
+      summary: Update custom role
+      operationId: updateRole
+      tags: [Access Control]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string }
+                description: { type: string }
+                permissions: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Role updated
+    delete:
+      summary: Delete custom role (system roles and roles with users are blocked)
+      operationId: deleteRole
+      tags: [Access Control]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Role deleted
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ============================================================================
+  # 4. PROJECTS & MEMBERSHIP
+  # ============================================================================
+  /projects:
+    get:
+      summary: List projects accessible to user
+      operationId: listProjects
+      tags: [Projects]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, archived] }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Paginated projects list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjects'
+    post:
+      summary: Create new project
+      operationId: createProject
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+
+  /projects/{id}:
+    get:
+      summary: Retrieve project details, config, and manager profile
+      operationId: getProject
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+    put:
+      summary: Update project metadata, calendar config, or target launch date
+      operationId: updateProject
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+    delete:
+      summary: Soft-archive project
+      operationId: deleteProject
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Project soft-deleted
+
+  /projects/{id}/restore:
+    post:
+      summary: Restore soft-archived project
+      operationId: restoreProject
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Project restored successfully
+
+  /projects/{id}/members:
+    post:
+      summary: Add member to project roster
+      operationId: addProjectMember
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, role]
+              properties:
+                user_id: { type: string }
+                role: { type: string, enum: [project_manager, contributor, viewer] }
+      responses:
+        '200':
+          description: Member added successfully
+
+  /projects/{id}/members/{user_id}:
+    delete:
+      summary: Remove member from project roster
+      operationId: removeProjectMember
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Member removed successfully
+
+  # ============================================================================
+  # 5. TASKS, WBS & SCHEDULING
+  # ============================================================================
+  /projects/{id}/tasks:
+    get:
+      summary: List all tasks in WBS hierarchical tree order
+      operationId: listTasks
+      tags: [Tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Tasks WBS list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Task' }
+    post:
+      summary: Create new task in project WBS
+      operationId: createTask
+      tags: [Tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+
+  /projects/{id}/tasks/{taskId}:
+    get:
+      summary: Retrieve task details, dependencies, and allocations
+      operationId: getTask
+      tags: [Tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+    put:
+      summary: Update task dates, progress, dependencies, or effort allocations
+      operationId: updateTask
+      tags: [Tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+    delete:
+      summary: Delete task from project WBS
+      operationId: deleteTask
+      tags: [Tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Task deleted
+
+  /projects/{id}/tasks/reorder:
+    post:
+      summary: Linearly reorder tasks within WBS siblings
+      operationId: reorderTasks
+      tags: [Tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tasks]
+              properties:
+                tasks:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, order_index]
+                    properties:
+                      id: { type: string }
+                      order_index: { type: integer }
+      responses:
+        '200':
+          description: Tasks reordered successfully
+
+  /projects/{id}/critical-path:
+    get:
+      summary: Execute CPM DAG analysis & retrieve critical path schedule
+      operationId: getCriticalPath
+      tags: [Scheduling]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Critical path analysis results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  critical_path_tasks:
+                    type: array
+                    items: { type: object }
+                  critical_tasks_count: { type: integer }
+
+  # ============================================================================
+  # 6. RISKS & BLOCKERS
+  # ============================================================================
+  /projects/{id}/risks:
+    get:
+      summary: List registered project risks
+      operationId: listRisks
+      tags: [Risks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Risks list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProjectRisk' }
+    post:
+      summary: Register project risk & optionally link blocking tasks
+      operationId: createRisk
+      tags: [Risks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRiskRequest'
+      responses:
+        '201':
+          description: Risk registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectRisk' }
+
+  /projects/{id}/risks/{riskId}:
+    get:
+      summary: Retrieve single risk details
+      operationId: getRisk
+      tags: [Risks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: riskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Risk details
+    put:
+      summary: Update risk status (mitigated/resolved automatically unblocks tasks)
+      operationId: updateRisk
+      tags: [Risks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: riskId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRiskRequest'
+      responses:
+        '200':
+          description: Risk updated
+    delete:
+      summary: Delete risk & release blocked tasks
+      operationId: deleteRisk
+      tags: [Risks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: riskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Risk deleted
+
+  # ============================================================================
+  # 7. BASELINES & VARIANCE
+  # ============================================================================
+  /projects/{id}/baselines/lock:
+    post:
+      summary: Lock official project baseline & record snapshot version
+      operationId: lockBaseline
+      tags: [Baselines]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Baseline locked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  locked_at: { type: string, format: date-time }
+
+  /projects/{id}/baselines/clear:
+    post:
+      summary: Clear active baseline dates on project tasks
+      operationId: clearBaseline
+      tags: [Baselines]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Baseline cleared successfully
+
+  /projects/{id}/baselines/variance:
+    get:
+      summary: Calculate Start Variance (SV) and Finish Variance (FV) in working days
+      operationId: getVariance
+      tags: [Baselines]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Schedule variance report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  has_locked_baseline: { type: boolean }
+                  variance_items:
+                    type: array
+                    items: { type: object }
+
+  # ============================================================================
+  # 8. COLLABORATION: REVIEW WORKFLOW
+  # ============================================================================
+  /projects/{id}/tasks/{taskId}/review/request:
+    post:
+      summary: Submit task for formal review sign-off
+      operationId: requestReview
+      tags: [Collaboration]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reviewer_id: { type: string }
+                note: { type: string }
+      responses:
+        '200':
+          description: Task placed In Review
+
+  /projects/{id}/tasks/{taskId}/review/approve:
+    post:
+      summary: Formally approve deliverable (Enforces Anti-Self-Approval guard)
+      operationId: approveReview
+      tags: [Collaboration]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deliverable approved; task completed
+        '422':
+          description: Anti-Self-Approval violation (Owner/Submitter/Contributor cannot approve)
+
+  /projects/{id}/tasks/{taskId}/review/reject:
+    post:
+      summary: Request changes on deliverable (Caps progress <= 95% & requires note)
+      operationId: rejectReview
+      tags: [Collaboration]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [review_note]
+              properties:
+                review_note: { type: string }
+                remaining_progress_pct: { type: integer, maximum: 95, default: 90 }
+      responses:
+        '200':
+          description: Changes requested; task reverted to In Progress
+
+  # ============================================================================
+  # 9. TASK COMMENTS
+  # ============================================================================
+  /projects/{id}/tasks/{taskId}/comments:
+    get:
+      summary: Retrieve chronological discussion comments for task
+      operationId: listComments
+      tags: [Collaboration]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Comments list
+    post:
+      summary: Post new comment to task discussion
+      operationId: createComment
+      tags: [Collaboration]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses:
+        '201':
+          description: Comment created
+
+  /projects/{id}/tasks/{taskId}/comments/{commentId}:
+    delete:
+      summary: Delete discussion comment (author or admin only)
+      operationId: deleteComment
+      tags: [Collaboration]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: commentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Comment deleted
+
+  # ============================================================================
+  # 10. AUDIT TRAILS
+  # ============================================================================
+  /projects/{id}/audit:
+    get:
+      summary: Retrieve project-scoped tamper-evident audit trail
+      operationId: getProjectAudit
+      tags: [Audit]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Project audit trail logs
+
+  /audit/global:
+    get:
+      summary: Retrieve global security audit logs (Admin only)
+      operationId: getGlobalAudit
+      tags: [Audit]
+      responses:
+        '200':
+          description: Global security audit logs
+
+  # ============================================================================
+  # 11. IMPORT & EXPORT
+  # ============================================================================
+  /projects/{id}/export:
+    get:
+      summary: Export complete project archive (WBS, dependencies, risks, effort)
+      operationId: exportProject
+      tags: [Migration]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Complete project JSON bundle
+
+  /projects/import:
+    post:
+      summary: Idempotent transactional import of project archive
+      operationId: importProject
+      tags: [Migration]
+      parameters:
+        - name: X-Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+          description: 24-hour sliding TTL client idempotency key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tasks]
+              properties:
+                name: { type: string }
+                code: { type: string }
+                description: { type: string }
+                config: { type: object }
+                tasks: { type: array, items: { type: object } }
+                risks: { type: array, items: { type: object } }
+      responses:
+        '201':
+          description: Project imported successfully
+        '200':
+          description: Cached idempotency match returned
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: User lacks required role or permission
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Request validation or domain invariant failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        message: { type: string }
+        code: { type: string, example: "AUTH_UNAUTHORIZED" }
+        errors: { type: object }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, example: "01m4rc2nbjem909ckfs3093xqy" }
+        name: { type: string, example: "Ahmed Khalil" }
+        email: { type: string, example: "ahmed.khalil@deliverops.local" }
+        phone: { type: string, nullable: true }
+        avatarUrl: { type: string, nullable: true }
+        jobTitle: { type: string, example: "Lead Integration Engineer" }
+        department: { type: string, example: "Engineering" }
+        skills: { type: array, items: { type: string } }
+        weeklyCapacityHours: { type: number, example: 40.0 }
+        status: { type: string, enum: [active, on_leave, inactive] }
+        color: { type: string, example: "#1f8a70" }
+        roles: { type: array, items: { type: string } }
+        primaryRole: { type: string, example: "project_manager" }
+
+    Role:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        displayName: { type: string }
+        description: { type: string, nullable: true }
+        isSystem: { type: boolean }
+        usersCount: { type: integer }
+        permissions: { type: array, items: { type: string } }
+
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        code: { type: string }
+        description: { type: string, nullable: true }
+        clientName: { type: string, nullable: true }
+        projectType: { type: string, enum: [client, internal, unclassified] }
+        hasLockedBaseline: { type: boolean }
+        activeBaselineVersion: { type: integer }
+        treeVersion: { type: integer }
+        isArchived: { type: boolean }
+        config: { $ref: '#/components/schemas/ProjectConfig' }
+
+    ProjectConfig:
+      type: object
+      properties:
+        weekendDays: { type: array, items: { type: integer }, example: [5, 6] }
+        holidays: { type: array, items: { type: string }, example: ["2026-12-25"] }
+        durationMode: { type: string, enum: [working_days, calendar] }
+        targetLaunchDate: { type: string, format: date, nullable: true }
+        highlightCriticalPath: { type: boolean, default: true }
+
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        parentId: { type: string, nullable: true }
+        wbsCode: { type: string, example: "1.2.1" }
+        name: { type: string }
+        category: { type: string }
+        priority: { type: string, enum: [Low, Medium, High, Urgent] }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        durationDays: { type: integer }
+        pct: { type: integer, minimum: 0, maximum: 100 }
+        status: { type: string, enum: [Not Started, In Progress, In Review, Blocked, Completed] }
+        reviewStatus: { type: string, enum: [none, pending_review, approved, changes_requested] }
+        orderIndex: { type: integer }
+        primaryOwnerId: { type: string, nullable: true }
+        reviewerId: { type: string, nullable: true }
+        submittedById: { type: string, nullable: true }
+        blockingRiskId: { type: string, nullable: true }
+        blockReason: { type: string, nullable: true }
+
+    ProjectRisk:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        title: { type: string }
+        description: { type: string }
+        type: { type: string, enum: [risk, issue, dependency, assumption] }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        likelihood: { type: string, enum: [low, medium, high] }
+        impact: { type: string, enum: [low, medium, high] }
+        status: { type: string, enum: [open, mitigating, mitigated, resolved, closed] }
+        mitigationPlan: { type: string }
+        ownerId: { type: string }
+
+    CreateUserRequest:
+      type: object
+      required: [name, email, password, job_title, department, weekly_capacity_hours, status, roles]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        job_title: { type: string }
+        department: { type: string }
+        weekly_capacity_hours: { type: number }
+        status: { type: string, enum: [active, on_leave, inactive] }
+        roles: { type: array, items: { type: string } }
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string }
+        job_title: { type: string }
+        department: { type: string }
+        weekly_capacity_hours: { type: number }
+        status: { type: string, enum: [active, on_leave, inactive] }
+        roles: { type: array, items: { type: string } }
+
+    CreateProjectRequest:
+      type: object
+      required: [name, code, project_manager_id]
+      properties:
+        name: { type: string }
+        code: { type: string }
+        description: { type: string }
+        project_manager_id: { type: string }
+        config: { $ref: '#/components/schemas/ProjectConfig' }
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        config: { $ref: '#/components/schemas/ProjectConfig' }
+
+    CreateTaskRequest:
+      type: object
+      required: [name, wbs_code, start_date, end_date]
+      properties:
+        name: { type: string }
+        wbs_code: { type: string }
+        parent_id: { type: string, nullable: true }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        primary_owner_id: { type: string }
+        category: { type: string }
+        effort_allocations: { type: array, items: { type: object } }
+
+    UpdateTaskRequest:
+      type: object
+      properties:
+        name: { type: string }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        pct: { type: integer }
+        status: { type: string }
+        order_index: { type: integer }
+
+    CreateRiskRequest:
+      type: object
+      required: [title, description, severity, likelihood, impact]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        likelihood: { type: string, enum: [low, medium, high] }
+        impact: { type: string, enum: [low, medium, high] }
+        mitigation_plan: { type: string }
+        linked_task_ids: { type: array, items: { type: string } }
+
+    UpdateRiskRequest:
+      type: object
+      properties:
+        title: { type: string }
+        status: { type: string, enum: [open, mitigating, mitigated, resolved, closed] }
+        mitigation_plan: { type: string }
+
+    PaginatedUsers:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/User' } }
+        meta: { type: object }
+
+    PaginatedProjects:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Project' } }
+        meta: { type: object }

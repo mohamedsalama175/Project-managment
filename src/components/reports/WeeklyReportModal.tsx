@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { ClayButton } from '../common/ClayButton';
+import { EmptyState } from '../common/EmptyState';
 import { getTodayUTC, diffCalendarDays } from '../../utils/dateUtils';
 import { calculateCPM } from '../../utils/cpmUtils';
 
@@ -196,8 +197,18 @@ _Report generated automatically by DeliverOps Enterprise Platform on ${new Date(
 
         {/* Printable & Visible Report Body */}
         <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-white dark:bg-[#151c23] text-slate-800 dark:text-slate-100 print:p-0">
-          {/* Executive Header Banner */}
-          <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
+          {totalTasks === 0 ? (
+            <div className="py-12">
+              <EmptyState
+                icon={<FileText className="w-6 h-6 text-emerald-500" />}
+                title="No Project Activity to Report"
+                description="The status report generator requires scheduled tasks, assignees, or milestones in the Work Breakdown Structure to synthesize metrics."
+              />
+            </div>
+          ) : (
+            <>
+              {/* Executive Header Banner */}
+              <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
                 DeliverOps Executive Delivery Brief
@@ -403,6 +414,8 @@ _Report generated automatically by DeliverOps Enterprise Platform on ${new Date(
               </div>
             </div>
           </section>
+        </>
+      )}
 
           {/* Report Footer */}
           <div className="pt-6 border-t border-slate-200 dark:border-slate-800 text-center text-[10px] text-slate-400">

@@ -1,0 +1,11 @@
+parameters:
+    level: 5
+    paths:
+        - app/
+    excludePaths:
+        - ./*/*/FileToBeExcluded.php
+
+
+rules:
+    - App\Rules\PhpStan\DetectUnscopedQueryRule
+    - App\Rules\PhpStan\ForbidDuplicateModularModelsRule

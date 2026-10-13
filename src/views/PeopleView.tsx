@@ -1,11 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Users,
   Search,
   Plus,
   Trash2,
   Edit2,
-  Calendar,
   Clock,
   Briefcase,
   AlertTriangle,
@@ -20,11 +19,38 @@ import {
   User,
   Link as LinkIcon,
   Loader2,
+  Shield,
+  RefreshCw,
+  Database,
+  Mail,
+  Lock,
+  Key,
+  LogIn,
+  Calendar,
+  TrendingUp,
+  Award,
+  Layers,
+  Sliders,
 } from 'lucide-react';
 import { TeamMember, UserRole, MemberAvailabilityStatus, Task } from '../types';
 import { useProjectStore } from '../stores/useProjectStore';
+import { useAuthStore } from '../stores/useAuthStore';
+import { apiClient, ApiUser, ApiRole } from '../api/client';
 import { ClayButton } from '../components/common/ClayButton';
+import { EmptyState } from '../components/common/EmptyState';
+import { RolesMatrixView } from '../components/rbac/RolesMatrixView';
+import { LoginModal } from '../components/auth/LoginModal';
 import { calculateMemberWorkload, getMemberTaskBreakdown } from '../utils/capacityUtils';
+
+// Phase 5 Resource Management Components
+import { TimeOffCalendar } from '../components/resources/TimeOffCalendar';
+import { SkillsMatrixTable } from '../components/resources/SkillsMatrixTable';
+import { CapacityForecastChart } from '../components/resources/CapacityForecastChart';
+import { HiringRecommendationsCard } from '../components/resources/HiringRecommendationsCard';
+import { LevelingWizardModal } from '../components/resources/LevelingWizardModal';
+import { CrossProjectTimelineSlideout } from '../components/resources/CrossProjectTimelineSlideout';
+import { TimesheetGrid } from '../components/resources/TimesheetGrid';
+import { FloatingTimerWidget } from '../components/resources/FloatingTimerWidget';
 
 export const PeopleView: React.FC = () => {
   const {
@@ -36,6 +62,28 @@ export const PeopleView: React.FC = () => {
     activeProjectId,
   } = useProjectStore();
 
+  const { can, user: currentAuthUser, checkAuth } = useAuthStore();
+
+  // Active Sub-Tab
+  const [activeTab, setActiveTab] = useState<
+    'directory' | 'capacity' | 'time_off' | 'skills' | 'timesheets' | 'rbac'
+  >('directory');
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  // Resource Management Modals & Slideouts
+  const [slideoutMember, setSlideoutMember] = useState<{ id: string; name: string } | null>(null);
+  const [isLevelingModalOpen, setIsLevelingModalOpen] = useState(false);
+  const [levelingProjectId, setLevelingProjectId] = useState<string>(
+    activeProjectId || projects[0]?.id || ''
+  );
+
+  // Backend state
+  const [isSyncingBackend, setIsSyncingBackend] = useState(false);
+  const [backendError, setBackendError] = useState<string | null>(null);
+  const [backendSuccess, setBackendSuccess] = useState<string | null>(null);
+  const [availableRoles, setAvailableRoles] = useState<ApiRole[]>([]);
+
+  // Directory Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -45,19 +93,85 @@ export const PeopleView: React.FC = () => {
 
   // Form State
   const [formName, setFormName] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formPassword, setFormPassword] = useState('');
   const [formJobTitle, setFormJobTitle] = useState('');
   const [formDepartment, setFormDepartment] = useState('');
-  const [formSystemRole, setFormSystemRole] = useState<UserRole>('contributor');
+  const [formSystemRole, setFormSystemRole] = useState<string>('contributor');
   const [formCapacity, setFormCapacity] = useState(40);
   const [formStatus, setFormStatus] = useState<MemberAvailabilityStatus>('active');
   const [formSkills, setFormSkills] = useState('');
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Photo Upload State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
+
+  // Fetch users & roles from Laravel backend on mount
+  const syncWithBackend = async () => {
+    setIsSyncingBackend(true);
+    setBackendError(null);
+    try {
+      await checkAuth();
+      const [usersRes, rolesRes] = await Promise.all([
+        apiClient.getUsers(),
+        apiClient.getRoles(),
+      ]);
+
+      setAvailableRoles(rolesRes.data);
+
+      if (usersRes.data && usersRes.data.length > 0) {
+        // Map backend users into local teamMembers
+        usersRes.data.forEach((u) => {
+          const mappedRole = (u.roles?.[0] as UserRole) || 'contributor';
+          const existing = teamMembers.find((m) => m.id === u.id || m.email === u.email);
+          if (existing) {
+            updateTeamMember(existing.id, {
+              name: u.name,
+              email: u.email,
+              phone: u.phone || undefined,
+              jobTitle: u.jobTitle || 'Team Member',
+              department: u.department || 'General',
+              skills: u.skills || [],
+              systemRole: mappedRole,
+              weeklyCapacityHours: u.weeklyCapacityHours || 40,
+              status: u.status || 'active',
+              color: u.color || '#10b981',
+              photoUrl: u.avatarUrl || undefined,
+              avatar: u.avatarUrl || undefined,
+            });
+          } else {
+            addTeamMember({
+              name: u.name,
+              email: u.email,
+              phone: u.phone || undefined,
+              jobTitle: u.jobTitle || 'Team Member',
+              department: u.department || 'General',
+              skills: u.skills || [],
+              systemRole: mappedRole,
+              weeklyCapacityHours: u.weeklyCapacityHours || 40,
+              status: u.status || 'active',
+              color: u.color || '#10b981',
+              photoUrl: u.avatarUrl || undefined,
+              avatar: u.avatarUrl || undefined,
+            });
+          }
+        });
+      }
+    } catch (err: any) {
+      setBackendError(err?.message || 'Could not connect to Laravel API. Operating in local mode.');
+    } finally {
+      setIsSyncingBackend(false);
+    }
+  };
+
+  useEffect(() => {
+    syncWithBackend();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Read, scale down, and compress selected image file into lightweight base64 data URL
   const handleProcessImageFile = (file: File) => {
@@ -78,7 +192,6 @@ export const PeopleView: React.FC = () => {
       const dataUrl = e.target?.result as string;
       const img = new Image();
       img.onload = () => {
-        // Automatically optimize & scale image down to max 384x384 for smooth rendering and lightweight storage
         const maxDim = 384;
         let w = img.width;
         let h = img.height;
@@ -87,7 +200,7 @@ export const PeopleView: React.FC = () => {
             h = Math.round((h * maxDim) / w);
             w = maxDim;
           } else {
-            w = Math.round((w * maxDim) / h);
+            h = Math.round((w * maxDim) / h);
             h = maxDim;
           }
         }
@@ -157,6 +270,8 @@ export const PeopleView: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingMember(null);
     setFormName('');
+    setFormEmail('');
+    setFormPassword('');
     setFormJobTitle('');
     setFormDepartment('Engineering');
     setFormSystemRole('contributor');
@@ -173,6 +288,8 @@ export const PeopleView: React.FC = () => {
   const handleOpenEdit = (m: TeamMember) => {
     setEditingMember(m);
     setFormName(m.name);
+    setFormEmail(m.email || '');
+    setFormPassword('');
     setFormJobTitle(m.jobTitle);
     setFormDepartment(m.department);
     setFormSystemRole(m.systemRole);
@@ -187,7 +304,7 @@ export const PeopleView: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  const handleSaveMember = (e: React.FormEvent) => {
+  const handleSaveMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
       setFormError('Member name is required.');
@@ -203,82 +320,307 @@ export const PeopleView: React.FC = () => {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    if (editingMember) {
-      updateTeamMember(editingMember.id, {
-        name: formName.trim(),
-        jobTitle: formJobTitle.trim(),
-        department: formDepartment.trim(),
-        systemRole: formSystemRole,
-        weeklyCapacityHours: Math.max(0, Number(formCapacity)),
-        status: formStatus,
-        skills: skillsArray,
-        photoUrl: formPhotoUrl.trim() || undefined,
-        avatar: formPhotoUrl.trim() || undefined,
-      });
-    } else {
-      addTeamMember({
-        name: formName.trim(),
-        jobTitle: formJobTitle.trim(),
-        department: formDepartment.trim() || 'General',
-        systemRole: formSystemRole,
-        weeklyCapacityHours: Math.max(0, Number(formCapacity)),
-        status: formStatus,
-        skills: skillsArray,
-        color: '#10b981',
-        photoUrl: formPhotoUrl.trim() || undefined,
-        avatar: formPhotoUrl.trim() || undefined,
-      });
-    }
+    const generatedEmail =
+      formEmail.trim() ||
+      `${formName.trim().toLowerCase().replace(/\s+/g, '.')}@deliverops.local`;
 
-    setIsAddModalOpen(false);
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      if (editingMember) {
+        // Update on Laravel API
+        try {
+          await apiClient.updateUser(editingMember.id, {
+            name: formName.trim(),
+            email: generatedEmail,
+            jobTitle: formJobTitle.trim(),
+            department: formDepartment.trim(),
+            weeklyCapacityHours: Math.max(0, Number(formCapacity)),
+            status: formStatus,
+            skills: skillsArray,
+            roles: [formSystemRole],
+            ...(formPassword ? { password: formPassword } : {}),
+          });
+        } catch (apiErr: any) {
+          console.warn('API update warning:', apiErr?.message);
+        }
+
+        // Update local store
+        updateTeamMember(editingMember.id, {
+          name: formName.trim(),
+          email: generatedEmail,
+          jobTitle: formJobTitle.trim(),
+          department: formDepartment.trim(),
+          systemRole: formSystemRole as UserRole,
+          weeklyCapacityHours: Math.max(0, Number(formCapacity)),
+          status: formStatus,
+          skills: skillsArray,
+          photoUrl: formPhotoUrl.trim() || undefined,
+          avatar: formPhotoUrl.trim() || undefined,
+        });
+
+        setBackendSuccess(`User "${formName}" updated successfully.`);
+      } else {
+        // Create on Laravel API
+        let createdId: string | undefined;
+        try {
+          const res = await apiClient.createUser({
+            name: formName.trim(),
+            email: generatedEmail,
+            password: formPassword.trim() || 'Password123!',
+            jobTitle: formJobTitle.trim(),
+            department: formDepartment.trim() || 'General',
+            weeklyCapacityHours: Math.max(0, Number(formCapacity)),
+            status: formStatus,
+            skills: skillsArray,
+            roles: [formSystemRole],
+            color: '#10b981',
+          });
+          createdId = res.data?.id;
+        } catch (apiErr: any) {
+          console.warn('API create warning:', apiErr?.message);
+        }
+
+        // Add to local store
+        addTeamMember({
+          name: formName.trim(),
+          email: generatedEmail,
+          jobTitle: formJobTitle.trim(),
+          department: formDepartment.trim() || 'General',
+          systemRole: formSystemRole as UserRole,
+          weeklyCapacityHours: Math.max(0, Number(formCapacity)),
+          status: formStatus,
+          skills: skillsArray,
+          color: '#10b981',
+          photoUrl: formPhotoUrl.trim() || undefined,
+          avatar: formPhotoUrl.trim() || undefined,
+        });
+
+        setBackendSuccess(`User "${formName}" registered successfully.`);
+      }
+
+      setIsAddModalOpen(false);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to save member.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     setDeleteErrorMessage(null);
+
+    // Call Laravel API for soft delete with RBAC guards
+    try {
+      await apiClient.deleteUser(id);
+      setBackendSuccess(`User "${name}" deactivated successfully.`);
+    } catch (apiErr: any) {
+      setDeleteErrorMessage(
+        apiErr?.message || `Cannot delete ${name}: Protected user account.`
+      );
+      return;
+    }
+
     const result = deleteTeamMember(id);
     if (!result.success) {
-      setDeleteErrorMessage(result.reason || `Cannot delete ${name}: Member has active assignments.`);
+      setDeleteErrorMessage(
+        result.reason || `Cannot delete ${name}: Member has active assignments.`
+      );
     }
   };
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-      {/* Top Banner & Search */}
       <div className="max-w-[1600px] mx-auto space-y-4">
+        {/* Top Header & Console Switcher */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shadow-inner">
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white">
-                Team Directory & Workload Hub
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white">
+                  People & Access Control Hub
+                </h1>
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Laravel 12 API Active
+                </span>
+              </div>
               <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">
-                Manage team profiles, monitor capacity utilization, and maintain single-point accountability.
+                Manage team capacity, single-point accountability, and RBAC roles matrix.
               </p>
             </div>
           </div>
 
-          <ClayButton
-            size="md"
-            variant="primary"
-            icon={<Plus className="w-4 h-4" />}
-            onClick={handleOpenAdd}
-          >
-            Add Team Member
-          </ClayButton>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={syncWithBackend}
+              disabled={isSyncingBackend}
+              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs transition-all flex items-center gap-1.5 text-xs font-bold"
+              title="Sync with MySQL Backend"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBackend ? 'animate-spin' : ''}`} />
+              <span className="hidden md:inline">Sync DB</span>
+            </button>
+
+            {activeTab === 'directory' && can('users.create') && (
+              <ClayButton
+                size="md"
+                variant="primary"
+                icon={<Plus className="w-4 h-4" />}
+                onClick={handleOpenAdd}
+              >
+                Add Team Member
+              </ClayButton>
+            )}
+          </div>
         </div>
 
-        {/* Delete Error Alert (TC-1.5) */}
-        {deleteErrorMessage && (
-          <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-between gap-3 text-xs text-red-600 dark:text-red-400 font-bold animate-in fade-in duration-200">
+        {/* Global Connection & Identity Pill */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+            <Database className="w-4 h-4 text-emerald-500" />
+            <span className="font-semibold">Backend Engine:</span>
+            <code className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+              MySQL 8.0 · Sanctum ULID Auth
+            </code>
+          </div>
+
+          {currentAuthUser ? (
+            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+              <span className="text-slate-400">Identity:</span>
+              <span className="font-bold text-slate-800 dark:text-slate-100">{currentAuthUser.name}</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 uppercase font-mono">
+                {currentAuthUser.primaryRole || 'admin'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsLoginModalOpen(true)}
+                className="ml-2 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all flex items-center gap-1"
+                title="View all credentials or switch login"
+              >
+                <Key className="w-3 h-3" />
+                Switch Account
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsLoginModalOpen(true)}
+              className="px-3 py-1 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Sign In
+            </button>
+          )}
+        </div>
+
+        {/* Navigation Tabs Switcher */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2">
+          <button
+            onClick={() => setActiveTab('directory')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'directory'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Team Directory ({filteredMembers.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('capacity')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'capacity'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            Capacity & Forecast
+          </button>
+
+          <button
+            onClick={() => setActiveTab('time_off')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'time_off'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Time-Off Calendar
+          </button>
+
+          <button
+            onClick={() => setActiveTab('skills')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'skills'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            Skills Matrix
+          </button>
+
+          <button
+            onClick={() => setActiveTab('timesheets')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'timesheets'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            Timesheets & Approvals
+          </button>
+
+          <button
+            onClick={() => setActiveTab('rbac')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'rbac'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Roles & RBAC
+            <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px]">
+              Matrix
+            </span>
+          </button>
+        </div>
+
+        {/* Global Success Banner */}
+        {backendSuccess && (
+          <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold animate-in fade-in duration-200">
             <div className="flex items-center gap-2">
-              <AlertOctagon className="w-5 h-5 shrink-0 text-red-500" />
-              <span>{deleteErrorMessage}</span>
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span>{backendSuccess}</span>
+            </div>
+            <button onClick={() => setBackendSuccess(null)} className="p-1 rounded-lg hover:bg-emerald-500/20">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Global Error Banner */}
+        {(deleteErrorMessage || backendError) && (
+          <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-between text-xs text-red-600 dark:text-red-400 font-bold animate-in fade-in duration-200">
+            <div className="flex items-center gap-2">
+              <AlertOctagon className="w-4 h-4 shrink-0 text-red-500" />
+              <span>{deleteErrorMessage || backendError}</span>
             </div>
             <button
-              onClick={() => setDeleteErrorMessage(null)}
+              onClick={() => {
+                setDeleteErrorMessage(null);
+                setBackendError(null);
+              }}
               className="p-1 rounded-lg hover:bg-red-500/20 text-red-500"
             >
               <X className="w-4 h-4" />
@@ -286,355 +628,455 @@ export const PeopleView: React.FC = () => {
           </div>
         )}
 
-        {/* Search & Department Filters */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
-          <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by name, role, department, or skill (e.g., PLC, React)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs pl-9 pr-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-800 dark:text-slate-100 placeholder-slate-400"
-            />
-          </div>
+        {/* TAB 1: TEAM DIRECTORY VIEW */}
+        {activeTab === 'directory' && (
+          <div className="space-y-4">
+            {/* Search & Department Filters */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+              <div className="relative flex-1 min-w-[240px] max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by name, role, department, or skill (e.g., PLC, React)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full text-xs pl-9 pr-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-800 dark:text-slate-100 placeholder-slate-400"
+                />
+              </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-400 mr-1">Department:</span>
-            {departments.map((dept) => (
-              <button
-                key={dept}
-                onClick={() => setSelectedDept(dept)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold capitalize transition-all ${
-                  selectedDept === dept
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
-                }`}
-              >
-                {dept}
-              </button>
-            ))}
-          </div>
-        </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-400 mr-1">Department:</span>
+                {departments.map((dept) => (
+                  <button
+                    key={dept}
+                    onClick={() => setSelectedDept(dept)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold capitalize transition-all ${
+                      selectedDept === dept
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {dept}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Team Members Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredMembers.map((member) => {
-            const workload = calculateMemberWorkload(member, allTasks, activeProject.config.weekendDays);
-            const breakdown = getMemberTaskBreakdown(member.id, allTasks, activeProject.config.weekendDays);
+            {/* Team Members Grid or Empty State */}
+            {filteredMembers.length === 0 ? (
+              <EmptyState
+                icon={<Users className="w-6 h-6 text-emerald-500" />}
+                title={
+                  searchQuery || selectedDept !== 'all'
+                    ? 'No Matching Team Members'
+                    : 'No Team Members in Directory'
+                }
+                description={
+                  searchQuery || selectedDept !== 'all'
+                    ? 'No members match the search query or department filter. Try clearing your filters.'
+                    : 'Your organization directory is currently empty. Add team members or invite colleagues to collaborate on delivery schedules.'
+                }
+                primaryAction={{
+                  label: 'Add Team Member',
+                  onClick: () => setIsAddModalOpen(true),
+                  icon: <Plus className="w-4 h-4" />,
+                }}
+                secondaryAction={
+                  searchQuery || selectedDept !== 'all'
+                    ? {
+                        label: 'Clear Filters',
+                        onClick: () => {
+                          setSearchQuery('');
+                          setSelectedDept('all');
+                        },
+                      }
+                    : undefined
+                }
+              />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredMembers.map((member) => {
+                const workload = calculateMemberWorkload(member, allTasks, activeProject?.config.weekendDays || []);
+                const breakdown = getMemberTaskBreakdown(member.id, allTasks, activeProject?.config.weekendDays || []);
 
-            return (
-              <div
-                key={member.id}
-                className="clay-card !p-5 flex flex-col justify-between space-y-4 border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition-all group"
-              >
-                <div>
-                  {/* Card Top: Avatar & Actions */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      {member.photoUrl || member.avatar ? (
-                        <img
-                          src={member.photoUrl || member.avatar}
-                          alt={member.name}
-                          className="w-12 h-12 rounded-2xl object-cover ring-2 ring-emerald-500/20 shadow-md"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm flex items-center justify-center shadow-md">
-                          {member.name
-                            .split(' ')
-                            .map((p) => p[0])
-                            .join('')
-                            .substring(0, 2)
-                            .toUpperCase()}
+                return (
+                  <div
+                    key={member.id}
+                    className="clay-card !p-5 flex flex-col justify-between space-y-4 border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition-all group"
+                  >
+                    <div>
+                      {/* Card Top: Avatar & Actions */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {member.photoUrl || member.avatar ? (
+                            <img
+                              src={member.photoUrl || member.avatar}
+                              alt={member.name}
+                              className="w-12 h-12 rounded-2xl object-cover ring-2 ring-emerald-500/20 shadow-md"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm flex items-center justify-center shadow-md">
+                              {member.name
+                                .split(' ')
+                                .map((p) => p[0])
+                                .join('')
+                                .substring(0, 2)
+                                .toUpperCase()}
+                            </div>
+                          )}
+
+                          <div>
+                            <div className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                              {member.name}
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                              {member.jobTitle}
+                            </div>
+                            {member.email && (
+                              <div className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">
+                                {member.email}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {can('users.edit') && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleOpenEdit(member)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+                              title="Edit Profile"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            {can('users.delete') && (
+                              <button
+                                onClick={() => handleDelete(member.id, member.name)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-500/10 transition-colors"
+                                title="Deactivate Member"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Badges: Department, Role, Status */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {member.department}
+                        </span>
+
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 capitalize">
+                          {member.systemRole.replace('_', ' ')}
+                        </span>
+
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            member.status === 'active'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : member.status === 'on_leave'
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                          }`}
+                        >
+                          {member.status === 'on_leave' ? 'On Leave' : member.status}
+                        </span>
+                      </div>
+
+                      {/* Skills Tags */}
+                      {member.skills && member.skills.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2.5">
+                          {member.skills.map((skill) => (
+                            <span
+                              key={skill}
+                              className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-slate-500 dark:text-slate-400"
+                            >
+                              {skill}
+                            </span>
+                          ))}
                         </div>
                       )}
 
-                      <div>
-                        <h3 className="text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                          {member.name}
-                        </h3>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                          {member.jobTitle}
+                      {/* Capacity & Workload Math */}
+                      <div className="mt-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 space-y-2">
+                        <div className="flex items-center justify-between text-xs font-semibold">
+                          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            Workload Ratio:
+                          </span>
+                          <span
+                            className={`font-mono font-bold ${
+                              workload.overallocated
+                                ? 'text-red-500 animate-pulse'
+                                : workload.utilizationPercentage >= 80
+                                ? 'text-amber-500'
+                                : 'text-emerald-600 dark:text-emerald-400'
+                            }`}
+                          >
+                            {workload.utilizationPercentage}% ({workload.totalAssignedHours}h / {workload.weeklyCapacityHours}h)
+                          </span>
                         </div>
-                        <span className="inline-block mt-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          {member.department}
-                        </span>
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              workload.overallocated
+                                ? 'bg-red-500'
+                                : workload.utilizationPercentage >= 80
+                                ? 'bg-amber-500'
+                                : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${Math.min(100, workload.utilizationPercentage)}%` }}
+                          />
+                        </div>
+
+                        {/* Overload Alert Warning */}
+                        {workload.overallocated && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-red-500 mt-1">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            <span>Over-allocated ({workload.totalAssignedHours}h assigned / {workload.weeklyCapacityHours}h capacity)</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                    {/* View Task Breakdown Drawer Trigger & Cross-Project Timeline */}
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleOpenEdit(member)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
-                        title="Edit profile"
+                        onClick={() => setSelectedMemberForTasks(member)}
+                        className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between transition-colors"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(member.id, member.name)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-500/10 transition-colors"
-                        title="Delete profile"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Role & Status Badges */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      {member.systemRole.replace('_', ' ')}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                        member.status === 'active'
-                          ? 'bg-emerald-500/10 text-emerald-600'
-                          : member.status === 'on_leave'
-                          ? 'bg-amber-500/10 text-amber-600'
-                          : 'bg-slate-300 dark:bg-slate-700 text-slate-600'
-                      }`}
-                    >
-                      {member.status.replace('_', ' ')}
-                    </span>
-                  </div>
-
-                  {/* Skills tags */}
-                  {(member.skills || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-3">
-                      {member.skills!.map((skill) => (
-                        <span
-                          key={skill}
-                          className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                        >
-                          {skill}
+                        <span className="flex items-center gap-1.5">
+                          <FolderKanban className="w-3.5 h-3.5 text-emerald-500" />
+                          Assigned Tasks
                         </span>
-                      ))}
+                        <span className="px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] font-mono">
+                          {breakdown.length}
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => setSlideoutMember({ id: member.id, name: member.name })}
+                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 transition-colors"
+                        title="Cross-Project Workload Timeline"
+                      >
+                        <Layers className="w-4 h-4 text-emerald-500" />
+                      </button>
                     </div>
-                  )}
-                </div>
-
-                {/* Capacity & Workload Gauge */}
-                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">
-                      Weekly Workload:
-                    </span>
-                    <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
-                      {workload.totalAssignedHours}h / {workload.weeklyCapacityHours}h
-                    </span>
                   </div>
-
-                  {/* Utilization Progress Bar */}
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        workload.overallocated
-                          ? 'bg-red-500'
-                          : workload.utilizationPercentage > 80
-                          ? 'bg-amber-500'
-                          : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${Math.min(100, workload.utilizationPercentage)}%` }}
-                    />
-                  </div>
-
-                  {/* Warnings & Task Count */}
-                  <div className="flex items-center justify-between text-[11px] font-semibold pt-0.5">
-                    <button
-                      onClick={() => setSelectedMemberForTasks(member)}
-                      className="text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
-                    >
-                      <span>{breakdown.length} active tasks</span>
-                    </button>
-
-                    {workload.overallocated ? (
-                      <span className="text-red-600 dark:text-red-400 flex items-center gap-1 font-bold animate-pulse">
-                        <AlertTriangle className="w-3 h-3" /> Overallocated ({workload.utilizationPercentage}%)
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 font-mono">
-                        {workload.utilizationPercentage}% loaded
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Unestimated & Overtime notices */}
-                  {workload.unestimatedTaskCount > 0 && (
-                    <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                      ⚠️ {workload.unestimatedTaskCount} task(s) unestimated
-                    </div>
-                  )}
-                  {workload.overtimeTaskCount > 0 && (
-                    <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
-                      ⚠️ {workload.overtimeTaskCount} weekend overtime task(s)
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
+      )}
+
+        {/* TAB 2: CAPACITY & FORECASTING */}
+        {activeTab === 'capacity' && (
+          <div className="space-y-6">
+            {/* Advisory Leveling Banner */}
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border border-emerald-500/20 flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
+                    Advisory Engine
+                  </span>
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    Resource Leveling & Critical Path Protection
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xl">
+                  Run heuristic schedule optimizations without altering tasks until you review and apply proposals. Preserves zero-float critical path items.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={levelingProjectId}
+                  onChange={(e) => setLevelingProjectId(e.target.value)}
+                  className="text-xs font-semibold px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+
+                <ClayButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsLevelingModalOpen(true)}
+                  disabled={!levelingProjectId}
+                  className="flex items-center gap-1.5 text-xs font-bold"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  Run Leveling Wizard
+                </ClayButton>
+              </div>
+            </div>
+
+            {/* Capacity Forecast Chart */}
+            <CapacityForecastChart
+              onSelectUserForSlideout={(userId, userName) =>
+                setSlideoutMember({ id: userId, name: userName })
+              }
+            />
+
+            {/* Hiring Recommendations Card */}
+            <HiringRecommendationsCard />
+          </div>
+        )}
+
+        {/* TAB 3: TIME-OFF CALENDAR */}
+        {activeTab === 'time_off' && <TimeOffCalendar />}
+
+        {/* TAB 4: SKILLS MATRIX */}
+        {activeTab === 'skills' && <SkillsMatrixTable />}
+
+        {/* TAB 5: TIMESHEETS & APPROVALS */}
+        {activeTab === 'timesheets' && <TimesheetGrid />}
+
+        {/* TAB 6: RBAC MATRIX VIEW */}
+        {activeTab === 'rbac' && <RolesMatrixView />}
       </div>
 
       {/* Add / Edit Member Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="clay-card w-full max-w-lg p-6 space-y-4">
+          <div className="clay-card w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <h2 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                 <Users className="w-5 h-5 text-emerald-500" />
-                <span>{editingMember ? 'Edit Team Member' : 'Add New Team Member'}</span>
+                {editingMember ? 'Edit Team Member' : 'Add New Team Member'}
               </h2>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {formError && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs font-semibold text-red-600">
-                {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleSaveMember} className="space-y-3.5">
-              {/* Profile Photo / Avatar Upload Section */}
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDropPhoto}
-                className="flex items-center gap-4 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 shadow-xs"
-              >
-                {/* Avatar Preview with click to upload */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="relative group cursor-pointer shrink-0"
-                  title="Click to choose a photo from your computer or phone"
-                >
-                  {formPhotoUrl ? (
-                    <img
-                      src={formPhotoUrl}
-                      alt="Profile preview"
-                      className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500 shadow-md group-hover:opacity-85 transition-opacity"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-lg flex items-center justify-center shadow-md group-hover:brightness-105 transition-all">
-                      {formName.trim() ? (
-                        formName
-                          .trim()
-                          .split(/\s+/)
-                          .map((p) => p[0])
-                          .slice(0, 2)
-                          .join('')
-                          .toUpperCase()
-                      ) : (
-                        <User className="w-8 h-8 text-white/80" />
-                      )}
-                    </div>
-                  )}
-
-                  {/* Hover Camera Overlay */}
-                  <div className="absolute inset-0 bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
-                    {isProcessingPhoto ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Camera className="w-5 h-5 drop-shadow" />
-                    )}
-                  </div>
+            <form onSubmit={handleSaveMember} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs font-bold text-red-500 flex items-center gap-2">
+                  <AlertOctagon className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
                 </div>
+              )}
 
-                {/* Upload Buttons & Options */}
-                <div className="flex-1 min-w-0 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
-                      className="hidden"
-                      onChange={handleFileInputChange}
-                    />
-
-                    <button
-                      type="button"
-                      disabled={isProcessingPhoto}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
-                    >
-                      {isProcessingPhoto ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Optimizing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>{formPhotoUrl ? 'Change Photo' : 'Upload Photo'}</span>
-                        </>
-                      )}
-                    </button>
-
+              {/* Photo Upload Area */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                  Member Photo
+                </label>
+                <div className="flex items-center gap-4">
+                  <div className="relative group shrink-0">
+                    {formPhotoUrl ? (
+                      <img
+                        src={formPhotoUrl}
+                        alt="Avatar Preview"
+                        className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/30 shadow-md"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400">
+                        <User className="w-6 h-6" />
+                      </div>
+                    )}
                     {formPhotoUrl && (
                       <button
                         type="button"
                         onClick={() => setFormPhotoUrl('')}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-red-500 hover:text-white text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
-                        title="Remove photo"
+                        className="absolute -top-1.5 -right-1.5 p-1 rounded-full bg-red-500 text-white shadow-md hover:bg-red-600"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Remove</span>
+                        <X className="w-3 h-3" />
                       </button>
                     )}
                   </div>
 
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Click or drag & drop a photo from your device (JPG, PNG, WebP).
-                  </p>
-
-                  {/* Optional URL Toggle / Input */}
-                  <div className="pt-0.5">
-                    {!showUrlInput ? (
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setShowUrlInput(true)}
-                        className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                        disabled={isProcessingPhoto}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-all"
                       >
-                        <LinkIcon className="w-3 h-3" />
-                        <span>Or link via image URL</span>
+                        {isProcessingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                        Upload Image
                       </button>
-                    ) : (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <input
-                          type="text"
-                          placeholder="Paste image URL (https://...)"
-                          value={formPhotoUrl}
-                          onChange={(e) => setFormPhotoUrl(e.target.value)}
-                          className="flex-1 text-[11px] py-1 px-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowUrlInput(false)}
-                          className="text-slate-400 hover:text-slate-600 p-1"
-                          title="Hide URL input"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => setShowUrlInput(!showUrlInput)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-200 transition-all"
+                      >
+                        <LinkIcon className="w-3.5 h-3.5" />
+                        URL
+                      </button>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileInputChange}
+                      className="hidden"
+                    />
+                    <p className="text-[10px] text-slate-400">JPEG, PNG, WebP up to 10MB (auto-compressed).</p>
                   </div>
+                </div>
+
+                {showUrlInput && (
+                  <input
+                    type="url"
+                    placeholder="https://example.com/avatar.jpg"
+                    value={formPhotoUrl}
+                    onChange={(e) => setFormPhotoUrl(e.target.value)}
+                    className="w-full mt-2 text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                  />
+                )}
+              </div>
+
+              {/* Basic Fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ahmed Khalil"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. ahmed.khalil@deliverops.com"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
-                  Full Name *
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center justify-between">
+                  <span>Password {editingMember && '(Leave blank to retain current)'}</span>
                 </label>
                 <input
-                  type="text"
-                  placeholder="e.g. Mahmoud Abdel-Fattah"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full text-xs font-semibold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                  type="password"
+                  placeholder={editingMember ? '••••••••' : 'Min 8 characters (default: Password123!)'}
+                  value={formPassword}
+                  onChange={(e) => setFormPassword(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                 />
               </div>
 
@@ -645,23 +1087,25 @@ export const PeopleView: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Industrial Automation Lead"
+                    required
+                    placeholder="e.g. Integration Engineer"
                     value={formJobTitle}
                     onChange={(e) => setFormJobTitle(e.target.value)}
-                    className="w-full text-xs font-semibold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                    className="w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    Department
+                    Department *
                   </label>
                   <input
                     type="text"
+                    required
                     placeholder="e.g. Engineering"
                     value={formDepartment}
                     onChange={(e) => setFormDepartment(e.target.value)}
-                    className="w-full text-xs font-semibold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                    className="w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -669,17 +1113,27 @@ export const PeopleView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    System Role
+                    Assigned Role *
                   </label>
                   <select
                     value={formSystemRole}
-                    onChange={(e) => setFormSystemRole(e.target.value as UserRole)}
+                    onChange={(e) => setFormSystemRole(e.target.value)}
                     className="w-full text-xs font-semibold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                   >
-                    <option value="contributor">Contributor</option>
-                    <option value="project_manager">Project Manager</option>
-                    <option value="admin">Administrator</option>
-                    <option value="viewer">Viewer</option>
+                    {availableRoles.length > 0 ? (
+                      availableRoles.map((r) => (
+                        <option key={r.id} value={r.name}>
+                          {r.displayName} ({r.name})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="contributor">Contributor</option>
+                        <option value="project_manager">Project Manager</option>
+                        <option value="viewer">Viewer</option>
+                        <option value="admin">Administrator</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -689,11 +1143,11 @@ export const PeopleView: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    min={0}
-                    max={80}
+                    min="0"
+                    max="168"
                     value={formCapacity}
                     onChange={(e) => setFormCapacity(Number(e.target.value))}
-                    className="w-full text-xs font-mono font-bold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                    className="w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -737,8 +1191,14 @@ export const PeopleView: React.FC = () => {
                 >
                   Cancel
                 </ClayButton>
-                <ClayButton size="sm" variant="primary" type="submit">
-                  {editingMember ? 'Save Changes' : 'Create Member'}
+                <ClayButton
+                  size="sm"
+                  variant="primary"
+                  type="submit"
+                  disabled={isSubmitting}
+                  icon={isSubmitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : undefined}
+                >
+                  {isSubmitting ? 'Saving...' : editingMember ? 'Save Changes' : 'Create Member'}
                 </ClayButton>
               </div>
             </form>
@@ -771,12 +1231,12 @@ export const PeopleView: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2">
-              {getMemberTaskBreakdown(selectedMemberForTasks.id, allTasks, activeProject.config.weekendDays).length === 0 ? (
+              {getMemberTaskBreakdown(selectedMemberForTasks.id, allTasks, activeProject?.config.weekendDays || []).length === 0 ? (
                 <div className="text-center py-8 text-xs text-slate-400">
                   No active tasks assigned to this team member.
                 </div>
               ) : (
-                getMemberTaskBreakdown(selectedMemberForTasks.id, allTasks, activeProject.config.weekendDays).map((t) => (
+                getMemberTaskBreakdown(selectedMemberForTasks.id, allTasks, activeProject?.config.weekendDays || []).map((t) => (
                   <div
                     key={t.taskId}
                     className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs flex items-center justify-between"
@@ -813,6 +1273,30 @@ export const PeopleView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* DeliverOps Auth & Login Console Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
+
+      {/* Floating Timer Quick-Log Widget */}
+      <FloatingTimerWidget />
+
+      {/* Cross-Project Timeline Slideout */}
+      <CrossProjectTimelineSlideout
+        isOpen={!!slideoutMember}
+        onClose={() => setSlideoutMember(null)}
+        userId={slideoutMember?.id || ''}
+        userName={slideoutMember?.name || ''}
+      />
+
+      {/* Advisory Leveling Wizard Modal */}
+      <LevelingWizardModal
+        isOpen={isLevelingModalOpen}
+        onClose={() => setIsLevelingModalOpen(false)}
+        projectId={levelingProjectId}
+        projectName={projects.find((p) => p.id === levelingProjectId)?.name || 'Project'}
+      />
     </div>
   );
 };

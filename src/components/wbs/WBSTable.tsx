@@ -13,6 +13,7 @@ import {
 import { Task, CategoryDef, DurationMode } from '../../types';
 import { WBSRow } from './WBSRow';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { EmptyState } from '../common/EmptyState';
 import { addCalendarDays, getTodayUTC } from '../../utils/dateUtils';
 import {
   SortConfig,
@@ -665,9 +666,9 @@ export const WBSTable: React.FC<WBSTableProps> = ({
       {/* Rows */}
       <div className="flex flex-col">
         {tasks.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-900/20">
-            <p className="font-semibold">No tasks match the active filters.</p>
-            {isFiltered && (
+          isFiltered ? (
+            <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-900/20">
+              <p className="font-semibold">No tasks match the active filters.</p>
               <button
                 type="button"
                 onClick={handleClearAllFilters}
@@ -675,8 +676,19 @@ export const WBSTable: React.FC<WBSTableProps> = ({
               >
                 Clear all filters
               </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              title="No Tasks in Work Breakdown Structure"
+              description="This project currently has no task rows scheduled. Add your first task row to begin mapping dependencies and critical paths."
+              primaryAction={{
+                label: 'Add First Task Row',
+                onClick: handleQuickAddTask,
+                icon: <Plus className="w-4 h-4" />,
+              }}
+            />
+          )
         ) : (
           tasks.map((task, idx) => (
             <WBSRow

@@ -32,6 +32,7 @@ import {
   dbLoadTaskComments,
 } from '../db/projectDB';
 import {
+  isDemoMode,
   INITIAL_TEAM_MEMBERS,
   migrateLegacyProjectData,
 } from '../utils/migrationUtils';
@@ -92,7 +93,7 @@ const DEFAULT_CATEGORIES_ERP = [
   { id: 'cat-qa', name: 'QA & Security', color: '#10b981' },
 ];
 
-const INITIAL_PROJECTS: Project[] = [
+const DEMO_PROJECTS: Project[] = [
   {
     id: 'proj-mafi-01',
     name: 'MAFI Scale Logistics & Automation',
@@ -511,17 +512,19 @@ const INITIAL_PROJECTS: Project[] = [
   },
 ];
 
+const INITIAL_PROJECTS: Project[] = isDemoMode ? DEMO_PROJECTS : [];
+
 export const useProjectStore = create<ProjectStore>()(
   persist(
     (set, get) => ({
       projects: INITIAL_PROJECTS,
-      activeProjectId: 'proj-mafi-01',
+      activeProjectId: isDemoMode ? (INITIAL_PROJECTS[0]?.id || '') : '',
       theme: 'light',
       zoomLevel: 24,
       activeView: 'planner',
 
-      // Simulated Persona Context (UX testing boundary)
-      activePersonaId: 'member-ahmed-khalil',
+      // Persona Context (Only active during local demo/simulation mode)
+      activePersonaId: isDemoMode ? 'member-ahmed-khalil' : '',
       activePersonaRole: 'project_manager',
       setPersona: (memberId, role) => {
         const member = get().teamMembers.find((m) => m.id === memberId);

@@ -19,6 +19,7 @@ import { useProjectStore } from '../stores/useProjectStore';
 import { ClayCard } from '../components/common/ClayCard';
 import { ClayButton } from '../components/common/ClayButton';
 import { ClayInput } from '../components/common/ClayInput';
+import { EmptyState } from '../components/common/EmptyState';
 import { Modal } from '../components/common/Modal';
 import { Project, CategoryDef } from '../types';
 import { getBaselineVariance } from '../utils/dateUtils';
@@ -82,7 +83,16 @@ export const ConfigView: React.FC = () => {
 
   if (!activeProject) {
     return (
-      <div className="p-8 text-center text-slate-500">No project selected.</div>
+      <div className="flex-1 flex items-center justify-center p-8">
+        <EmptyState
+          title="No Project Selected"
+          description="Select or create a project to configure calendar rules, categories, and baselines."
+          primaryAction={{
+            label: 'Go to Dashboard',
+            onClick: () => useProjectStore.getState().setActiveView('dashboard'),
+          }}
+        />
+      </div>
     );
   }
 

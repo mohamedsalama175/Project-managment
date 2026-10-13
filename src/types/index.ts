@@ -3,7 +3,7 @@ export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 export type ReviewStatus = 'none' | 'pending_review' | 'approved' | 'changes_requested';
 export type DurationMode = 'calendar' | 'working_days';
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ActiveView = 'planner' | 'config' | 'dashboard' | 'team';
+export type ActiveView = 'planner' | 'config' | 'dashboard' | 'team' | 'financials' | 'integrations' | 'automation' | 'compliance' | 'status';
 export type UserRole = 'admin' | 'project_manager' | 'contributor' | 'viewer';
 export type MemberAvailabilityStatus = 'active' | 'on_leave' | 'inactive';
 
