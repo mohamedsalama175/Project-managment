@@ -46,6 +46,7 @@ interface WBSTableProps {
   totalTaskCount?: number;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  onOpenDetails?: (task: Task) => void;
 }
 
 interface ColumnHeaderProps {
@@ -196,6 +197,7 @@ export const WBSTable: React.FC<WBSTableProps> = ({
   totalTaskCount,
   scrollRef,
   onScroll,
+  onOpenDetails,
 }) => {
   const { addTask, reorderTasks } = useProjectStore();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -477,11 +479,11 @@ export const WBSTable: React.FC<WBSTableProps> = ({
             />
           </div>
 
-          {/* Assignee */}
-          <div className="w-24 px-1 flex items-center">
+          {/* Owner / Team */}
+          <div className="w-44 px-1 flex items-center">
             <ColumnHeader
               column="assignee"
-              label="Assignee"
+              label="Owner / Team"
               sortColumn="assignee"
               activeSort={activeSort}
               onSort={handleSortClick}
@@ -563,6 +565,13 @@ export const WBSTable: React.FC<WBSTableProps> = ({
               align="center"
               popoverAlign="left"
             />
+          </div>
+
+          {/* Effort */}
+          <div className="w-16 px-0.5 text-center flex items-center justify-center">
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+              Effort
+            </span>
           </div>
 
           {/* Progress (%) */}
@@ -684,6 +693,7 @@ export const WBSTable: React.FC<WBSTableProps> = ({
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
+              onOpenDetails={onOpenDetails}
             />
           ))
         )}

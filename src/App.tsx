@@ -1,12 +1,19 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useProjectStore, hydrateIndexedDB } from './stores/useProjectStore';
 import { Navbar } from './components/layout/Navbar';
 import { PlannerView } from './views/PlannerView';
 import { ConfigView } from './views/ConfigView';
 import { DashboardView } from './views/DashboardView';
+import { PeopleView } from './views/PeopleView';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
+import { RiskRegisterModal } from './components/risks/RiskRegisterModal';
+import { WeeklyReportModal } from './components/reports/WeeklyReportModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 export const App: React.FC = () => {
   const { activeView, theme, projects } = useProjectStore();
+  const [isMobileRisksOpen, setIsMobileRisksOpen] = useState(false);
+  const [isMobileReportOpen, setIsMobileReportOpen] = useState(false);
 
   // Hydrate IndexedDB from localStorage projects on first load
   useEffect(() => {
@@ -40,17 +47,36 @@ export const App: React.FC = () => {
   }, [theme]);
 
   return (
-    <div className="min-h-screen bg-[#eef2f5] dark:bg-[#11161b] text-slate-800 dark:text-slate-100 flex flex-col transition-colors selection:bg-emerald-500/20 selection:text-emerald-800 dark:selection:text-emerald-300">
-      {/* Top Persistent Claymorphic Navbar */}
-      <Navbar />
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#eef2f5] dark:bg-[#11161b] text-slate-800 dark:text-slate-100 flex flex-col transition-colors selection:bg-emerald-500/20 selection:text-emerald-800 dark:selection:text-emerald-300">
+        {/* Top Persistent Claymorphic Navbar */}
+        <Navbar />
 
-      {/* Main Application Content Body */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {activeView === 'planner' && <PlannerView />}
-        {activeView === 'config' && <ConfigView />}
-        {activeView === 'dashboard' && <DashboardView />}
-      </main>
-    </div>
+        {/* Main Application Content Body */}
+        <main className="flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
+          {activeView === 'planner' && <PlannerView />}
+          {activeView === 'team' && <PeopleView />}
+          {activeView === 'config' && <ConfigView />}
+          {activeView === 'dashboard' && <DashboardView />}
+        </main>
+
+        {/* Mobile Floating Bottom Dock (< 768px) */}
+        <MobileBottomNav
+          onOpenRisks={() => setIsMobileRisksOpen(true)}
+          onOpenReport={() => setIsMobileReportOpen(true)}
+        />
+
+        {/* Mobile Triggered Modals */}
+        <RiskRegisterModal
+          isOpen={isMobileRisksOpen}
+          onClose={() => setIsMobileRisksOpen(false)}
+        />
+        <WeeklyReportModal
+          isOpen={isMobileReportOpen}
+          onClose={() => setIsMobileReportOpen(false)}
+        />
+      </div>
+    </ErrorBoundary>
   );
 };
 

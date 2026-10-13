@@ -5,11 +5,13 @@ import {
   Diamond,
   Calendar,
   Link2,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 import { Task, TaskStatus, TaskPriority, CategoryDef, DurationMode } from '../../types';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { calculateDuration } from '../../utils/dateUtils';
+import { AssigneeCombobox } from '../team/AssigneeCombobox';
 
 interface WBSRowProps {
   task: Task;
@@ -24,6 +26,7 @@ interface WBSRowProps {
   onDragStart?: (e: React.DragEvent, index: number) => void;
   onDragOver?: (e: React.DragEvent, index: number) => void;
   onDrop?: (e: React.DragEvent, index: number) => void;
+  onOpenDetails?: (task: Task) => void;
 }
 
 export const WBSRow: React.FC<WBSRowProps> = ({
@@ -39,8 +42,9 @@ export const WBSRow: React.FC<WBSRowProps> = ({
   onDragStart,
   onDragOver,
   onDrop,
+  onOpenDetails,
 }) => {
-  const { updateTask, deleteTask } = useProjectStore();
+  const { updateTask, deleteTask, teamMembers, reassignTask } = useProjectStore();
   const [isPredOpen, setIsPredOpen] = useState(false);
 
   const duration = calculateDuration(task.start, task.end, durationMode, weekendDays);
@@ -49,6 +53,7 @@ export const WBSRow: React.FC<WBSRowProps> = ({
     'Not Started': 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
     'In Progress': 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800',
     'Blocked': 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800',
+    'In Review': 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800',
     'Completed': 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
   };
 
@@ -156,15 +161,26 @@ export const WBSRow: React.FC<WBSRowProps> = ({
         </select>
       </div>
 
-      {/* Assignee */}
-      <div className="w-24 px-1.5">
-        <input
-          type="text"
-          value={task.assignee}
-          onChange={(e) => updateTask(task.id, { assignee: e.target.value })}
-          placeholder="Assignee..."
-          aria-label="Assignee"
-          className="w-full bg-transparent text-[11px] px-1.5 py-1 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+      {/* Primary Owner & Contributors (AssigneeCombobox) */}
+      <div className="w-44 px-1 flex items-center">
+        <AssigneeCombobox
+          primaryOwnerId={task.primaryOwnerId}
+          primaryOwnerHours={task.primaryOwnerHours}
+          contributorAllocations={task.contributorAllocations || []}
+          estimatedHours={task.estimatedHours}
+          legacyAssignee={task.assignee}
+          assigneeUnresolved={task.assigneeUnresolved}
+          teamMembers={teamMembers}
+          onAssignChange={(newOwnerId, newOwnerHours, newContributors) => {
+            if (newOwnerId !== task.primaryOwnerId) {
+              reassignTask(task.id, newOwnerId);
+            }
+            updateTask(task.id, {
+              primaryOwnerId: newOwnerId,
+              primaryOwnerHours: newOwnerHours,
+              contributorAllocations: newContributors,
+            });
+          }}
         />
       </div>
 
@@ -205,6 +221,27 @@ export const WBSRow: React.FC<WBSRowProps> = ({
         {task.isMilestone ? '0d' : `${duration}d`}
       </div>
 
+      {/* Effort (Hours) - Option B preserves unestimated */}
+      <div className="w-16 px-1 flex items-center justify-center gap-0.5">
+        <input
+          type="number"
+          min={0}
+          value={task.estimatedHours ?? ''}
+          placeholder="—"
+          title={task.estimatedHours == null ? 'Unestimated task' : `${task.estimatedHours}h estimated effort`}
+          onChange={(e) => {
+            const val = e.target.value === '' ? null : Math.max(0, Number(e.target.value));
+            updateTask(task.id, { estimatedHours: val });
+          }}
+          className={`w-11 text-center text-[11px] font-mono py-0.5 px-0.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+            task.estimatedHours == null
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold placeholder:text-amber-400'
+              : 'bg-transparent border-transparent hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+          }`}
+        />
+        <span className="text-[10px] text-slate-400 font-mono">h</span>
+      </div>
+
       {/* Progress % */}
       <div className="w-16 px-1 flex items-center gap-1">
         <input
@@ -237,6 +274,7 @@ export const WBSRow: React.FC<WBSRowProps> = ({
         >
           <option value="Not Started">Not Started</option>
           <option value="In Progress">In Progress</option>
+          <option value="In Review">In Review</option>
           <option value="Blocked">Blocked</option>
           <option value="Completed">Completed</option>
         </select>
@@ -292,8 +330,17 @@ export const WBSRow: React.FC<WBSRowProps> = ({
         )}
       </div>
 
-      {/* Row Actions: Milestone toggle & Delete */}
+      {/* Row Actions: Details drawer, Milestone toggle & Delete */}
       <div className="w-16 px-1 flex items-center justify-center gap-1">
+        <button
+          type="button"
+          onClick={() => onOpenDetails?.(task)}
+          title="Open task details drawer & comments"
+          className="p-1 rounded-lg text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+        </button>
+
         <button
           type="button"
           onClick={() => updateTask(task.id, { isMilestone: !task.isMilestone })}

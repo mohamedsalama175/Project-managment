@@ -84,6 +84,7 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
     const map: Record<TaskStatus, number> = {
       'Not Started': 0,
       'In Progress': 0,
+      'In Review': 0,
       Blocked: 0,
       Completed: 0,
     };
@@ -610,7 +611,7 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
         {/* --- Status Filter --- */}
         {column === 'status' && (
           <div className="space-y-1">
-            {(['Not Started', 'In Progress', 'Blocked', 'Completed'] as TaskStatus[]).map(
+            {(['Not Started', 'In Progress', 'In Review', 'Blocked', 'Completed'] as TaskStatus[]).map(
               (st) => {
                 const selected = filters.status?.includes(st) ?? false;
                 const count = statusCounts[st] || 0;
@@ -619,6 +620,8 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
                     'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
                   'In Progress':
                     'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300',
+                  'In Review':
+                    'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300',
                   Blocked: 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300',
                   Completed:
                     'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300',

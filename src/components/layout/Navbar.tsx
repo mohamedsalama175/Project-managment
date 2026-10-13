@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   FolderKanban,
   Settings,
@@ -13,11 +13,17 @@ import {
   Sparkles,
   CheckCircle,
   XCircle,
+  Users,
+  ShieldAlert,
+  FileText,
+  UserCheck,
 } from 'lucide-react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { ThemeToggle } from '../common/ThemeToggle';
 import { ClayButton } from '../common/ClayButton';
 import { NewProjectModal } from './NewProjectModal';
+import { WeeklyReportModal } from '../reports/WeeklyReportModal';
+import { RiskRegisterModal } from '../risks/RiskRegisterModal';
 
 type Toast = { id: number; msg: string; ok: boolean };
 
@@ -34,21 +40,30 @@ export const Navbar: React.FC = () => {
     exportProjectCSV,
     importProjectJSON,
     importProjectCSV,
+    teamMembers,
+    activePersonaId,
+    activePersonaRole,
+    setPersona,
   } = useProjectStore();
 
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isRisksOpen, setIsRisksOpen] = useState(false);
+  const [isPersonaOpen, setIsPersonaOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const switcherRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLDivElement>(null);
+  const personaRef = useRef<HTMLDivElement>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
+  const activeProject = (projects || []).find((p) => p.id === activeProjectId) || (projects && projects[0]);
+  const activePersona = (teamMembers || []).find((m) => m.id === activePersonaId) || (teamMembers && teamMembers[0]);
 
   const addToast = (msg: string, ok: boolean) => {
     const id = Date.now();
@@ -67,6 +82,9 @@ export const Navbar: React.FC = () => {
       }
       if (importRef.current && !importRef.current.contains(e.target as Node)) {
         setIsImportOpen(false);
+      }
+      if (personaRef.current && !personaRef.current.contains(e.target as Node)) {
+        setIsPersonaOpen(false);
       }
     };
     document.addEventListener('mousedown', handleOutside);
@@ -222,20 +240,20 @@ export const Navbar: React.FC = () => {
               }`}
             >
               <FolderKanban className="w-4 h-4" />
-              <span>Planner View</span>
+              <span>Planner</span>
             </button>
 
             <button
               type="button"
-              onClick={() => setActiveView('config')}
+              onClick={() => setActiveView('team')}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
-                activeView === 'config'
+                activeView === 'team'
                   ? 'clay-card text-emerald-600 dark:text-emerald-400 font-bold scale-[1.02]'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
-              <Settings className="w-4 h-4" />
-              <span>Project Config</span>
+              <Users className="w-4 h-4" />
+              <span>Team Hub</span>
             </button>
 
             <button
@@ -248,7 +266,20 @@ export const Navbar: React.FC = () => {
               }`}
             >
               <LayoutGrid className="w-4 h-4" />
-              <span>Projects Hub</span>
+              <span>Projects</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveView('config')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
+                activeView === 'config'
+                  ? 'clay-card text-emerald-600 dark:text-emerald-400 font-bold scale-[1.02]'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Config</span>
             </button>
           </nav>
 
@@ -361,6 +392,108 @@ export const Navbar: React.FC = () => {
               )}
             </div>
 
+            {/* Delivery Report Action */}
+            <ClayButton
+              size="sm"
+              variant="default"
+              icon={<FileText className="w-3.5 h-3.5 text-blue-500" />}
+              onClick={() => setIsReportOpen(true)}
+              className="hidden sm:inline-flex"
+            >
+              Report
+            </ClayButton>
+
+            {/* RIB / Risks Action */}
+            <ClayButton
+              size="sm"
+              variant="default"
+              icon={<ShieldAlert className="w-3.5 h-3.5 text-rose-500" />}
+              onClick={() => setIsRisksOpen(true)}
+              className="hidden sm:inline-flex"
+            >
+              Risks
+            </ClayButton>
+
+            {/* Simulated Persona Switcher Pill */}
+            <div className="relative" ref={personaRef}>
+              <button
+                type="button"
+                onClick={() => setIsPersonaOpen(!isPersonaOpen)}
+                className="clay-card-flat !px-2.5 !py-1 flex items-center gap-1.5 text-xs hover:brightness-105 transition-all text-left"
+                title="Switch persona for role simulation & audit attribution"
+              >
+                <div className="flex items-center gap-1.5">
+                  {activePersona?.photoUrl || activePersona?.avatar ? (
+                    <img
+                      src={activePersona.photoUrl || activePersona.avatar}
+                      alt={activePersona.name}
+                      className="w-4 h-4 rounded-full object-cover shrink-0 ring-1 ring-emerald-500/40"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-slate-400">🧪</span>
+                  )}
+                  <span className="font-bold text-slate-700 dark:text-slate-200 max-w-[100px] truncate text-[11px]">
+                    {activePersona?.name ? activePersona.name.split(' ')[0] : 'User'}
+                  </span>
+                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold uppercase">
+                    {(activePersonaRole || 'PM').toUpperCase()}
+                  </span>
+                </div>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+
+              {isPersonaOpen && (
+                <div className="absolute right-0 mt-2 w-64 clay-card !p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 shadow-xl">
+                  <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    Switch Active Persona (Simulation)
+                  </div>
+                  <div className="max-h-56 overflow-y-auto space-y-1 my-1">
+                    {(teamMembers || []).map((m) => {
+                      const isCur = m.id === activePersonaId;
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            setPersona(m.id, m.systemRole);
+                            setIsPersonaOpen(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                            isCur
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold'
+                              : 'hover:bg-slate-200/50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate pr-1">
+                            {m.photoUrl || m.avatar ? (
+                              <img
+                                src={m.photoUrl || m.avatar}
+                                alt={m.name}
+                                className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-slate-300 dark:ring-slate-700"
+                              />
+                            ) : (
+                              <div
+                                className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[9px] text-white shrink-0"
+                                style={{ backgroundColor: m.color || '#10b981' }}
+                              >
+                                {m.name.charAt(0)}
+                              </div>
+                            )}
+                            <div className="truncate">
+                              <div className="truncate font-semibold">{m.name}</div>
+                              <div className="text-[10px] text-slate-400">{m.jobTitle}</div>
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 uppercase shrink-0">
+                            {m.systemRole}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Theme Toggle */}
             <ThemeToggle />
           </div>
@@ -404,6 +537,18 @@ export const Navbar: React.FC = () => {
       <NewProjectModal
         isOpen={isNewProjectOpen}
         onClose={() => setIsNewProjectOpen(false)}
+      />
+
+      {/* Weekly Report Modal */}
+      <WeeklyReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+      />
+
+      {/* Risk Register Modal */}
+      <RiskRegisterModal
+        isOpen={isRisksOpen}
+        onClose={() => setIsRisksOpen(false)}
       />
     </>
   );

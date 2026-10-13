@@ -8,6 +8,10 @@ import {
   Calendar,
   CheckCircle,
   ArrowRight,
+  ShieldAlert,
+  AlertOctagon,
+  User,
+  Building,
 } from 'lucide-react';
 import { useProjectStore } from '../stores/useProjectStore';
 import { ClayCard } from '../components/common/ClayCard';
@@ -25,12 +29,19 @@ export const DashboardView: React.FC = () => {
     setActiveView,
     duplicateProject,
     deleteProject,
+    teamMembers,
   } = useProjectStore();
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'client' | 'internal'>('all');
 
   const todayStr = getTodayUTC();
+
+  const filteredProjects = projects.filter((p) => {
+    if (typeFilter === 'all') return true;
+    return p.projectType === typeFilter;
+  });
 
   const handleOpenPlanner = (projectId: string) => {
     setActiveProject(projectId);
@@ -43,7 +54,7 @@ export const DashboardView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-8 animate-in fade-in duration-200">
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6 animate-in fade-in duration-200">
       {/* Header Banner */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -51,7 +62,7 @@ export const DashboardView: React.FC = () => {
             Enterprise Projects Hub
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Overview of all active portfolios, isolated project calendars, progress health, and milestones.
+            Overview of active client and internal delivery portfolios, resource assignments, and blocker health.
           </p>
         </div>
 
@@ -64,41 +75,71 @@ export const DashboardView: React.FC = () => {
         </ClayButton>
       </div>
 
+      {/* Classification Filter Tabs */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 w-fit text-xs font-bold">
+        {(['all', 'client', 'internal'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTypeFilter(t)}
+            className={`px-3 py-1.5 rounded-xl capitalize transition-all ${
+              typeFilter === t
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            {t === 'all' ? 'All Portfolios' : `${t} Projects`}
+          </button>
+        ))}
+      </div>
+
       {/* Grid of Projects */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map((proj: Project) => {
+        {filteredProjects.map((proj: Project) => {
           const isActive = proj.id === activeProjectId;
-          const tasksCount = proj.tasks.length;
-          const completedCount = proj.tasks.filter((t: Task) => t.pct === 100).length;
-          const overdueCount = proj.tasks.filter(
-            (t: Task) => t.end && t.end < todayStr && t.pct < 100
+          const tasks = proj.tasks || [];
+          const tasksCount = tasks.length;
+          const completedCount = tasks.filter((t: Task) => t.pct === 100).length;
+          const overdueCount = tasks.filter(
+            (t: Task) => t.end && t.end < todayStr && (t.pct || 0) < 100
           ).length;
 
           const progress = tasksCount
             ? Math.round(
-                proj.tasks.reduce((sum: number, t: Task) => sum + (t.pct || 0), 0) / tasksCount
+                tasks.reduce((sum: number, t: Task) => sum + (t.pct || 0), 0) / tasksCount
               )
             : 0;
 
-          const weekendType = proj.config.weekendDays.includes(5)
+          const weekendType = proj.config?.weekendDays?.includes(5)
             ? 'Fri/Sat Rest'
             : 'Sat/Sun Rest';
+
+          const pm = (teamMembers || []).find((m) => m.id === proj.projectManagerId);
+          const activeBlockers = (proj.risks || []).filter(
+            (r) => r.type === 'blocker' && r.status !== 'resolved'
+          );
 
           return (
             <ClayCard
               key={proj.id}
-              className={`flex flex-col justify-between space-y-5 hover:scale-[1.01] transition-transform ${
+              className={`flex flex-col justify-between space-y-4 hover:scale-[1.01] transition-transform ${
                 isActive
                   ? 'border-2 border-emerald-500/80 shadow-[0_0_20px_rgba(46,196,156,0.15)]'
                   : ''
               }`}
             >
               {/* Top Meta */}
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    {proj.code}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      {proj.code}
+                    </span>
+                    {proj.clientName && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 truncate max-w-[120px]" title={proj.clientName}>
+                        {proj.clientName}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold">
                     <Calendar className="w-3.5 h-3.5" />
@@ -110,10 +151,24 @@ export const DashboardView: React.FC = () => {
                   <h3 className="text-base font-extrabold text-slate-900 dark:text-white line-clamp-1">
                     {proj.name}
                   </h3>
+                  <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
+                    <User className="w-3 h-3" />
+                    <span>PM: <strong className="text-slate-600 dark:text-slate-300">{pm ? pm.name : 'Unassigned'}</strong></span>
+                  </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 min-h-[32px]">
                     {proj.description || 'No description provided.'}
                   </p>
                 </div>
+
+                {/* Blocker Alert Banner */}
+                {activeBlockers.length > 0 && (
+                  <div className="p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-[11px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                    <AlertOctagon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">
+                      {activeBlockers.length} Blocker(s): {activeBlockers[0].title}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Progress & Stats */}

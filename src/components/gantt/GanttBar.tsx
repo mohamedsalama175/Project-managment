@@ -30,7 +30,10 @@ export const GanttBar: React.FC<GanttBarProps> = ({
   categories,
   todayStr,
 }) => {
-  const { updateTask } = useProjectStore();
+  const { updateTask, teamMembers } = useProjectStore();
+  const primaryOwner = (teamMembers || []).find(
+    (m) => m.id === task.primaryOwnerId
+  );
 
   const [dragMode, setDragMode] = useState<DragMode>(null);
   const [tempStart, setTempStart] = useState<string>(task.start);
@@ -238,6 +241,23 @@ export const GanttBar: React.FC<GanttBarProps> = ({
               {effectivePct === 100 && (
                 <Check className="w-3 h-3 text-emerald-700 dark:text-emerald-300 shrink-0" />
               )}
+              {primaryOwner && (
+                (primaryOwner.photoUrl || primaryOwner.avatar) ? (
+                  <img
+                    src={primaryOwner.photoUrl || primaryOwner.avatar}
+                    alt={primaryOwner.name}
+                    title={`Owner: ${primaryOwner.name}`}
+                    className="w-4 h-4 rounded-full object-cover shrink-0 ring-1 ring-white/60 shadow-xs"
+                  />
+                ) : (
+                  <span
+                    title={`Owner: ${primaryOwner.name}`}
+                    className="w-4 h-4 rounded-full bg-slate-800/80 text-[8px] font-bold text-white flex items-center justify-center shrink-0 ring-1 ring-white/60"
+                  >
+                    {primaryOwner.name.substring(0, 1).toUpperCase()}
+                  </span>
+                )
+              )}
               <span
                 className="truncate text-[11px] font-bold text-slate-800 dark:text-slate-100"
                 style={{
@@ -253,6 +273,27 @@ export const GanttBar: React.FC<GanttBarProps> = ({
               {width > 120 && <span>· {duration}d</span>}
             </div>
           </div>
+        ) : width >= 48 ? (
+          <div className="absolute inset-0 flex items-center justify-center gap-1 pointer-events-none text-[10px] font-mono font-bold text-slate-700 dark:text-slate-200">
+            {primaryOwner && (
+              (primaryOwner.photoUrl || primaryOwner.avatar) ? (
+                <img
+                  src={primaryOwner.photoUrl || primaryOwner.avatar}
+                  alt={primaryOwner.name}
+                  title={`Owner: ${primaryOwner.name}`}
+                  className="w-3.5 h-3.5 rounded-full object-cover shrink-0 ring-1 ring-white/60"
+                />
+              ) : (
+                <span
+                  title={`Owner: ${primaryOwner.name}`}
+                  className="w-3.5 h-3.5 rounded-full bg-slate-800/80 text-[7px] font-bold text-white flex items-center justify-center shrink-0"
+                >
+                  {primaryOwner.name.substring(0, 1).toUpperCase()}
+                </span>
+              )
+            )}
+            <span>{effectivePct}%</span>
+          </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-[10px] font-mono font-bold text-slate-700 dark:text-slate-200">
             {effectivePct}%
@@ -265,6 +306,23 @@ export const GanttBar: React.FC<GanttBarProps> = ({
         <div className="absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-bold text-slate-700 dark:text-slate-200 pointer-events-none drop-shadow-sm z-20">
           {overdue && (
             <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 animate-pulse" />
+          )}
+          {primaryOwner && (
+            primaryOwner.photoUrl ? (
+              <img
+                src={primaryOwner.photoUrl}
+                alt={primaryOwner.name}
+                title={`Owner: ${primaryOwner.name}`}
+                className="w-3.5 h-3.5 rounded-full object-cover shrink-0 ring-1 ring-slate-300 dark:ring-slate-600"
+              />
+            ) : (
+              <span
+                title={`Owner: ${primaryOwner.name}`}
+                className="w-3.5 h-3.5 rounded-full bg-slate-600 text-[7px] font-bold text-white flex items-center justify-center shrink-0"
+              >
+                {primaryOwner.name.substring(0, 1).toUpperCase()}
+              </span>
+            )
           )}
           <span>{task.name}</span>
           <span className="text-[10px] font-mono text-slate-400">({duration}d)</span>

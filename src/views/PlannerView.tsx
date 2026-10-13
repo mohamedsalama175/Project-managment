@@ -4,10 +4,13 @@ import {
   AlertTriangle,
   Lock,
   Unlock,
+  Table as TableIcon,
+  BarChart3,
 } from 'lucide-react';
 import { useProjectStore } from '../stores/useProjectStore';
 import { WBSTable } from '../components/wbs/WBSTable';
 import { GanttChart } from '../components/gantt/GanttChart';
+import { TaskDetailDrawer } from '../components/wbs/TaskDetailDrawer';
 import { calculateCPM } from '../utils/cpmUtils';
 import {
   parseDateUTC,
@@ -28,6 +31,12 @@ export const PlannerView: React.FC = () => {
   } = useProjectStore();
 
   const activeProject = projects.find((p: Project) => p.id === activeProjectId) || projects[0];
+
+  // Mobile Segmented Mode (Table vs Timeline)
+  const [mobileMode, setMobileMode] = useState<'table' | 'timeline'>('table');
+
+  // Selected Task for Drawer
+  const [selectedTaskForDrawer, setSelectedTaskForDrawer] = useState<Task | null>(null);
 
   // Draggable Splitter Width State
   const [tableWidth, setTableWidth] = useState<number>(760);
@@ -96,22 +105,23 @@ export const PlannerView: React.FC = () => {
 
   // Filtered tasks based on active column filters
   const filteredTasks = useMemo(() => {
-    if (!activeProject?.tasks) return [];
+    if (!activeProject?.tasks || !activeProject?.config) return [];
     return filterTasks(
       activeProject.tasks,
       filters,
-      activeProject.config.durationMode,
-      activeProject.config.weekendDays
+      activeProject.config.durationMode || 'working_days',
+      activeProject.config.weekendDays || [5, 6]
     );
   }, [activeProject, filters]);
 
   // Tasks sorted by active column sort or natural WBS order
   const displayedTasks = useMemo(() => {
+    if (!activeProject?.config) return filteredTasks;
     return sortTasks(
       filteredTasks,
       sortConfig,
-      activeProject.config.durationMode,
-      activeProject.config.weekendDays
+      activeProject.config.durationMode || 'working_days',
+      activeProject.config.weekendDays || [5, 6]
     );
   }, [filteredTasks, sortConfig, activeProject]);
 
@@ -292,17 +302,56 @@ export const PlannerView: React.FC = () => {
         </div>
       </div>
 
+      {/* Mobile Segmented View Control (< 768px) */}
+      <div className="flex md:hidden items-center p-1 mx-3 mb-2 rounded-xl bg-slate-200/80 dark:bg-slate-800/80 border border-slate-300/40 dark:border-slate-700 justify-center gap-1">
+        <button
+          type="button"
+          onClick={() => setMobileMode('table')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+            mobileMode === 'table'
+              ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <TableIcon className="w-3.5 h-3.5" />
+          <span>Task Table</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileMode('timeline')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+            mobileMode === 'timeline'
+              ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          <span>Timeline View</span>
+        </button>
+      </div>
+
       {/* Main Split-Pane Workspace (WBS Left Table + Gantt Right Timeline) */}
       <div
         ref={splitContainerRef}
-        className={`flex-1 flex overflow-hidden ${
+        className={`flex-1 flex overflow-hidden flex-col md:flex-row ${
           isResizing ? 'cursor-col-resize select-none' : ''
         }`}
       >
-        {/* Left Sticky WBS Table Pane */}
+        {/* Left WBS Table Pane */}
         <div
-          style={{ width: `${tableWidth}px`, flexShrink: 0 }}
-          className="flex flex-col h-full overflow-hidden"
+          style={{ width: undefined }}
+          className={`h-full overflow-hidden flex-col ${
+            mobileMode === 'table' ? 'flex w-full md:w-auto' : 'hidden md:flex'
+          }`}
+          ref={(el) => {
+            if (el && window.innerWidth >= 768) {
+              el.style.width = `${tableWidth}px`;
+              el.style.flexShrink = '0';
+            } else if (el) {
+              el.style.width = '100%';
+              el.style.flexShrink = '1';
+            }
+          }}
         >
           <WBSTable
             tasks={displayedTasks}
@@ -319,21 +368,26 @@ export const PlannerView: React.FC = () => {
             onFilterChange={setFilters}
             scrollRef={wbsScrollRef}
             onScroll={handleWBSScroll}
+            onOpenDetails={setSelectedTaskForDrawer}
           />
         </div>
 
-        {/* Draggable Column Boundary Splitter */}
+        {/* Draggable Column Boundary Splitter (Desktop Only) */}
         <div
           onMouseDown={handleSplitterMouseDown}
           onDoubleClick={() => setTableWidth(760)}
           title="Drag to resize pane, double click to reset"
-          className="relative w-2 hover:w-2.5 z-30 cursor-col-resize group bg-slate-300/50 dark:bg-slate-800 hover:bg-emerald-500 transition-all flex items-center justify-center shrink-0"
+          className="hidden md:flex relative w-2 hover:w-2.5 z-30 cursor-col-resize group bg-slate-300/50 dark:bg-slate-800 hover:bg-emerald-500 transition-all items-center justify-center shrink-0"
         >
           <div className="w-0.5 h-8 bg-slate-400 dark:bg-slate-600 group-hover:bg-white rounded-full transition-colors" />
         </div>
 
         {/* Right Interactive Gantt Chart Canvas Pane */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden min-w-[300px]">
+        <div
+          className={`flex-col h-full overflow-hidden min-w-[300px] flex-1 ${
+            mobileMode === 'timeline' ? 'flex w-full' : 'hidden md:flex'
+          }`}
+        >
           <GanttChart
             tasks={displayedTasks}
             timelineStart={timelineStart}
@@ -350,6 +404,13 @@ export const PlannerView: React.FC = () => {
           />
         </div>
       </div>
+
+      {/* Task Details Drawer */}
+      <TaskDetailDrawer
+        task={selectedTaskForDrawer}
+        isOpen={!!selectedTaskForDrawer}
+        onClose={() => setSelectedTaskForDrawer(null)}
+      />
     </div>
   );
 };
