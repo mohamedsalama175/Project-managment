@@ -1,6 +1,11 @@
 # 14. DeliverOps API Error Code Catalog
 
-## 1. Global Standard Error Schema
+> **Document ID:** `DOC-14-ERROR-CODES`  
+> **Status:** Production-Ready / Implementation-Grade  
+> **Version:** 2.2.0  
+> **Harmonized With:** [03-CRUD](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/03-CRUD-SPECIFICATIONS.md), [05-BACKEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/05-BACKEND-ARCHITECTURE.md), [06-API](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/06-API-REFERENCE.md), [07-FRONTEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/07-FRONTEND-ARCHITECTURE.md), [09-SECURITY](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/09-SECURITY-AND-COMPLIANCE.md)
+
+---
 
 All DeliverOps API errors return a standard JSON envelope with machine-readable error codes and specific validation fields:
 

@@ -27,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(\App\Http\Middleware\TrackSlaMetrics::class);
 
         $middleware->validateCsrfTokens(except: [
+            'api/v1/auth/*',
             'api/v1/system/install',
             'api/v1/system/install/*',
             'api/v1/integrations/github/webhook',

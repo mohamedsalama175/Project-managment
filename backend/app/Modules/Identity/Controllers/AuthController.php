@@ -366,8 +366,38 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load(['roles', 'organizations', 'defaultOrganization', 'primaryTasks', 'reviewTasks']);
+        $user = $request->user();
+
+        // Auto-bootstrap tenant context if not set yet so scoped relations can safely load
+        $tenantManager = app(\App\Modules\Tenancy\Services\TenantManager::class);
+        if (!$tenantManager->getTenantId()) {
+            $targetOrgId = $request->header('X-Organization-Id') ?: $user->default_organization_id ?: $user->organizations()->first()?->id;
+            if ($targetOrgId) {
+                $membership = $user->organizations()->where('organizations.id', $targetOrgId)->first();
+                if ($membership) {
+                    $tenantManager->setTenant($membership);
+                    setPermissionsTeamId($targetOrgId);
+                }
+            }
+        }
+
+        $relations = ['roles', 'organizations', 'defaultOrganization'];
+        if ($tenantManager->getTenantId()) {
+            $relations[] = 'primaryTasks';
+            $relations[] = 'reviewTasks';
+        }
+
+        $user->load($relations);
         $permissions = $user->getAllPermissions()->pluck('name')->values()->toArray();
+
+        $activeTasksCount = 0;
+        if ($tenantManager->getTenantId()) {
+            try {
+                $activeTasksCount = $user->primaryTasks()->whereNotIn('status', ['Completed'])->count();
+            } catch (\Throwable $e) {
+                $activeTasksCount = 0;
+            }
+        }
 
         return response()->json([
             'user' => new UserResource($user),
@@ -376,7 +406,7 @@ class AuthController extends Controller
             'permissions' => $permissions,
             'mfaEnabled' => (bool) $user->mfa_enabled,
             'workloadSummary' => [
-                'activeTasksCount' => $user->primaryTasks()->whereNotIn('status', ['Completed'])->count(),
+                'activeTasksCount' => $activeTasksCount,
                 'weeklyCapacityHours' => (float) $user->weekly_capacity_hours,
             ],
         ]);

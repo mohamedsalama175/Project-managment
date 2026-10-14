@@ -22,7 +22,23 @@ class TenantManager
 
     public function getTenantId(): ?string
     {
-        return $this->currentTenant?->id;
+        if ($this->currentTenant) {
+            return $this->currentTenant->id;
+        }
+
+        if (app()->bound('request')) {
+            $req = app('request');
+            $headerOrgId = $req->header('X-Organization-Id');
+            if ($headerOrgId) {
+                return $headerOrgId;
+            }
+            $user = $req->user();
+            if ($user?->default_organization_id) {
+                return $user->default_organization_id;
+            }
+        }
+
+        return null;
     }
 
     public function isBypassed(): bool

@@ -44,6 +44,8 @@ class OnboardingService
 
         $flowType = $isOwner ? 'owner' : 'invited_member';
 
+        $isAdmin = $user->email === 'admin@admin.com';
+
         return OnboardingProgress::firstOrCreate(
             [
                 'user_id' => $user->id,
@@ -52,11 +54,12 @@ class OnboardingService
             [
                 'id' => (string) Str::ulid(),
                 'flow_type' => $flowType,
-                'current_step' => 1,
-                'completed_steps' => [],
+                'current_step' => $isAdmin ? 7 : 1,
+                'completed_steps' => $isAdmin ? [1, 2, 3, 4, 5, 6, 7] : [],
                 'skipped_steps' => [],
-                'is_completed' => false,
-                'tour_completed' => false,
+                'is_completed' => $isAdmin,
+                'tour_completed' => $isAdmin,
+                'completed_at' => $isAdmin ? now() : null,
             ]
         );
     }

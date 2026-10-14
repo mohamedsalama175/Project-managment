@@ -45,6 +45,15 @@ class PermissionSeeder extends Seeder
                 'tasks.request_review' => 'Submit completed tasks for sign-off review',
                 'tasks.approve_review' => 'Approve or reject tasks pending review',
                 'tasks.delete' => 'Delete tasks from project WBS',
+                'tasks.list' => 'List assigned tasks',
+                'tasks.show' => 'View task details',
+                'tasks.edit_own_progress' => 'Update progress on own tasks',
+                'tasks.comment' => 'Comment on assigned tasks',
+                'tasks.view.all' => 'View all tasks across all users and projects',
+            ],
+            'auth' => [
+                'auth.me' => 'Inspect own authenticated profile',
+                'auth.logout' => 'Terminate own user session',
             ],
             'baselines' => [
                 'baselines.lock' => 'Lock or clear official project baselines',
@@ -96,6 +105,11 @@ class PermissionSeeder extends Seeder
             'sso' => [
                 'sso.manage' => 'Configure SAML/OIDC SSO and SCIM provisioning',
             ],
+            'automation' => [
+                'automation.view' => 'View automation rules and triggers',
+                'automation.manage' => 'Create and edit automation recipes',
+                'automation.execute' => 'Manually execute automation workflows',
+            ],
         ];
 
         foreach ($matrix as $group => $permissions) {
@@ -144,6 +158,19 @@ class PermissionSeeder extends Seeder
         $viewer->syncPermissions([
             'projects.view', 'users.view',
             'budget.view', 'costs.view', 'evm.view', 'invoices.view',
+        ]);
+
+        $fieldEngineer = Role::firstOrCreate(
+            ['name' => 'field_engineer', 'guard_name' => 'web'],
+            ['display_name' => 'Field Engineer', 'description' => 'Task execution only', 'is_system' => true]
+        );
+        $fieldEngineer->syncPermissions([
+            'tasks.list',
+            'tasks.show',
+            'tasks.edit_own_progress',
+            'tasks.comment',
+            'auth.me',
+            'auth.logout',
         ]);
 
         // 3. Ensure System Organization exists for multi-tenant bootstrap

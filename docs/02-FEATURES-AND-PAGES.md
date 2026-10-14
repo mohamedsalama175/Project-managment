@@ -1,172 +1,244 @@
 # 02. Features & Pages Guide
 
 > **Document ID:** `DOC-02-FEATURES-AND-PAGES`  
-> **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
+> **Status:** Production-Verified / Field-Tested  
+> **Version:** 2.2.0 (CLAYGANTT Modern Enterprise Release)  
 > **Harmonized With:** 01-BUSINESS, 05-BACKEND, 06-API, 07-FRONTEND, 11-REPORTING, 12-OPENAPI
 
 ---
 
 ## 1. Design System & Shell Architecture
 
-**DeliverOps** is built with a modern **Claymorphic** and **Glassmorphic** design system, combining tactile depth, soft multi-layered shadows, smooth micro-animations, and full dark/light theme fidelity.
+**DeliverOps** is powered by **CLAYGANTT** — an ultra-dense, low-friction, modern enterprise interface inspired by Linear, Bryntum Gantt, and Vercel Geist. It merges tactile claymorphism with crisp glassmorphic panels, subtle micro-animations, and full dark/light theme fidelity.
+
+### 1.1 Header Consolidation (4 Bars -> 2 Unified Bars)
+
+The interface eliminates scattered duplicate controls (e.g., duplicate `+ Add Row` buttons, duplicate `6 Overdue` badges, and duplicate `Critical Path` toggles) by consolidating the entire upper control area into **two unified, compact bars**:
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        DELIVEROPS TOP SHELL NAVBAR                     │
-├───────────────┬─────────────────────────────┬──────────────────────────┤
-│ Brand Logo    │ Project Switcher & Search   │ View Navigation Tabs     │
-│ & Status Pill │ Active Project Dropdown     │ [Planner] [People]       │
-│               │ New Project Modal Button    │ [Dashboard] [Config]     │
-├───────────────┴─────────────────────────────┴──────────────────────────┤
-│ Actions Bar: [Lock Baseline] [Risk Register] [Weekly Report] [Theme]   │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ BAR 1: PRIMARY APP NAVBAR (h-12, px-4, border-b border-slate-200 bg-white dark:bg-[#11161b])                                           │
+├───────────────────────────────────┬───────────────────────────────────────────┬────────────────────────────────────────────────────────┤
+│ [CLAYGANTT] [WBS Matrix]          │ SLIDING SEGMENTED VIEW TABS:              │ [Deliverables: Active] [Light | Dark | Auto]           │
+│ [MAFI-01 : Project Name ▼]        │ [Planner] [Team's Hub] [Roles]            │ [Import / Export ▼] [Report] [Risks]                   │
+│ [━━━━░░ 31% Complete]             │ [Financials] [Projects] [Config]          │ [User Avatar & Organization Profile ▼]                 │
+├───────────────────────────────────┴───────────────────────────────────────────┴────────────────────────────────────────────────────────┤
+│ BAR 2: PLANNER TOOLBAR (h-11, px-4, border-b border-slate-200/80 bg-slate-50/60 dark:bg-[#151c24])                                    │
+├───────────────────────────────────┬───────────────────────────────────────────┬────────────────────────────────────────────────────────┤
+│ [+ Add Deliverable (Cmd+N)]       │ [Day | Week | Month | Fit]                │ [Grid | 50:50 | Gantt] (Layout Presets)                │
+│ [↶ Undo] [↷ Redo] [Filter (n)]    │ [Overdue (n)] [Critical Path (n)]         │ CAPACITY CHIPS:                                        │
+│ [🔍 Quick search...]              │ [Locked: +4d Drift]                       │ [Mohamed Salama 1d] [M.H. 28d] [O.H. 98d] [S.N. 114d]   │
+└───────────────────────────────────┴───────────────────────────────────────────┴────────────────────────────────────────────────────────┘
 ```
 
-- **Color Tokens**:
-  - Light Background: `#eef2f5` with soft slate borders and clean white frosted cards.
-  - Dark Background: `#11161b` with rich slate-900 panels and `#1f8a70` emerald accents.
-- **Micro-Interactions**: Dynamic hover lifts, smooth drawer slides (`translateX`), spring-based expand/collapse trees, and high-performance SVG dependency rendering.
-- **Mobile Responsive Dock**: On screens `< 768px`, a floating bottom glassmorphism dock provides rapid one-tap access to primary views, the Risk Register, and Weekly Reports.
+#### Primary App Navbar (`h-12`):
+- **Left**: Brand Mark (`CLAYGANTT` + subtle `WBS Matrix` pill), Active Project Switcher with dropdown and task counts, and a compact **Inline Progress Pill** (`31% Complete` with a 48px micro progress bar).
+- **Center**: Sliding Segmented Navigation Tabs (`Planner`, `Team's Hub`, `Roles`, `Financials`, `Projects`, `Config`) with smooth pill transition.
+- **Right**: Deliverables System Active status indicator with pulsing beacon, 3-way Theme Segmented Toggle (`Light | Dark | Auto`), Import/Export dropdown, Delivery Report trigger, Risk Register trigger, and Tenant Profile avatar.
+
+#### Planner Toolbar (`h-11`):
+- **Left**: Primary Action `+ Add Deliverable` (`Cmd+N` / `Ctrl+N`), Undo/Redo controls, Filter popover with active count badge, and Quick Search input.
+- **Center**: Segmented Zoom controls (`Day` [48px] \| `Week` [16px] \| `Month` [4px] \| `Fit`), Metric Badges (`Overdue` count pill, `Critical Path` count pill with flame icon, `Locked Baseline` drift indicator).
+- **Right**: Layout Preset Segmented Toggle (`Grid` [100% WBS] \| `50:50` [Split] \| `Gantt` [100% Timeline]), and interactive **Resource Workload Capacity Chips** (`Mohamed Salama 1d`, `M.H. 28d`, `O.H. 98d`, `S.N. 114d`, `Z.H. 65d`).
 
 ---
 
-## 2. Platform Views & Pages
+## 2. Split-Pane Workspace Architecture
 
-### 2.1 View 1: Planner View (`PlannerView.tsx`)
-The **Planner View** is the primary operational workspace, featuring a synchronized, high-performance split-pane layout: **Work Breakdown Structure (WBS) Table** on the left and the **Interactive Gantt Timeline** on the right.
+The main workspace operates in a **46% / 54% split-pane ratio** with synchronized vertical scrolling between the WBS table and the Gantt timeline:
 
 ```
-┌───────────────────────────────────┬───────────────────────────────────┐
-│       WBS HIERARCHICAL TABLE      │       INTERACTIVE GANTT CANVAS    │
-├────┬──────────────────┬─────┬─────┼─Oct 2026──────────────────────────┤
-│ #  │ Task Name        │ Dur │ Pct │ 12  13  14  15  16  17  18  19  20│
-├────┼──────────────────┼─────┼─────┼───────────────────────────────────┤
-│ 1  │ ▼ 1. Engineering │ 12d │ 65% │ [█████████████░░░░░░░]            │
-│ 1.1│   1.1 PLC Logic  │  5d │100% │ [████████████]──┐ (Dependency)    │
-│ 1.2│   1.2 Simulator  │  7d │ 40% │                 └──>[████░░░░░░]  │
-│ 2  │ ◆ Delivery Gate  │  0d │  0% │                            ◆ (CP) │
-└────┴──────────────────┴─────┴─────┴───────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┬──┬────────────────────────────────────────────────────────────┐
+│ LEFT PANE (46% Default): WBS DATA GRID                 ││ │ RIGHT PANE (54% Default): GANTT CANVAS                     │
+│ Strict 40px row heights                                 ││ │ Two-tier header (48px), Today marker (2px rose)            │
+│ "View at Rest, Edit on Focus"                           ││ │ Sticky inner bar labels, Orthogonal bezier curves          │
+│ 10 Columns: #, Task, Cat, Priority, Owner, Dates, Eff   ││ │ 200ms glassmorphic hover card                              │
+└─────────────────────────────────────────────────────────┴──┴────────────────────────────────────────────────────────────┘
+                                                           ▲
+                                                   6px Drag Handle
+                                      (Double-click resets to 46% / 54%)
 ```
 
-#### Key Capabilities:
-1. **WBS Tree Hierarchy**:
-   - Multi-level task nesting (`parent_id`) with collapsible summary nodes.
-   - Effort-weighted progress rollups automatically recalculate parent completion percentages.
-   - Sibling order index drag-and-drop reordering.
-2. **Column Filter Popover (`ColumnFilterPopover.tsx`)**:
-   - Dynamic visibility toggling for WBS Code, Task Name, Start Date, End Date, Duration, Assignees, Progress Bar, Status, and Total Float.
-3. **Interactive Gantt Canvas (`GanttBar.tsx`)**:
-   - **Time Scales**: Seamless switching between Days (48px/day), Weeks (16px/day), and Months (4px/day).
-   - **Critical Path Highlight**: Visual toggle highlighting tasks where Total Float $\le 0$ with bright crimson (`#EF4444`) styling and glow effects.
-   - **SVG Dependency Connectors**: Cubic Bézier curves connecting predecessor finish edges to successor start edges.
-   - **Milestone Diamonds**: Automatic rendering of 0-day duration events as milestone checkpoints.
-4. **Baseline Comparison Ghost Overlay**:
-   - When a baseline version is selected, ghost baseline bars appear directly below active task bars, visually revealing positive ($FV > 0$, slipping) or negative ($FV < 0$, early) delivery variance.
+- **Interactive 6px Drag Handle**: Desktop split divider with center grip indicator; dragging dynamically resizes panes, and **double-clicking resets the split to exact 46% / 54%**.
+- **Cross-Pane Hover Highlight**: Hovering over any task in the left WBS table highlights the corresponding Gantt bar and vice versa. Predecessor bars and curves glow simultaneously.
 
 ---
 
-### 2.2 View 2: People & RBAC View (`PeopleView.tsx`)
-The **People View** provides resource management, capacity balancing, and Role-Based Access Control administration.
+## 3. Platform Views
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        PEOPLE & RESOURCE CAPACITY                      │
-├───────────────────────────────────┬────────────────────────────────────┤
-│ Team Member Directory & Cards     │ Weekly Workload Heatmap            │
-│ • Ahmed Khalil (Lead Engineer)    │ Member  | W41 | W42 | W43 | W44    │
-│   Capacity: 40h/wk | Active: 3    │ Ahmed   | 35h | 40h | 48h!| 20h    │
-│ • Tariq Mansoor (Integration)     │ Tariq   | 20h | 30h | 30h | 15h    │
-│   Capacity: 40h/wk | Active: 2    │ Sarah   | 40h | 40h | 40h | 40h    │
-├───────────────────────────────────┴────────────────────────────────────┤
-│ Role & Permission Management Matrix (Admin Only)                       │
-│ [Administrator] [Project Manager] [Contributor] [Viewer]               │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### 3.1 View 1: Planner View (`PlannerView.tsx`)
+The primary execution engine for delivery teams, featuring the WBS table and virtualized Gantt canvas.
 
-#### Key Capabilities:
-1. **Team Directory**:
-   - Filterable by department (Engineering, Operations, QA, Executive), search keywords, and availability status (`active`, `on_leave`, `inactive`).
-   - Profile cards showing skills tags, weekly contracted capacity, and active task counts.
-2. **Weekly Workload Heatmap**:
-   - Aggregates hours across all assigned tasks by week.
-   - Color-coded capacity indicators: Green (optimal, $\le 85\%$), Amber (near capacity, $86\% - 100\%$), Red (over-allocated, $> 100\%$).
-3. **Role & Permission Manager (`rbac/`)**:
-   - Spatie-backed permission matrix grouping capabilities by domain (`users`, `roles`, `projects`, `tasks`, `baselines`, `risks`, `comments`, `audit`).
-   - System roles (`is_system = true`) are visually flagged and protected against deletion or renaming.
+#### 1. WBS Table Columns (`WBSTable.tsx` & `WBSRow.tsx`):
+1. **Row Index / Checkbox (`w-10`)**: Row number and multi-select checkbox.
+2. **Deliverable Name & Tree Hierarchy (`min-w-[280px]`)**:
+   - Circular SVG progress ring (0%–100%) with completion checkmark.
+   - Expand/collapse toggle for parent nodes.
+   - WBS numbering code (`1.0`, `1.1`, `1.2`).
+   - Milestone diamond badge for 0-duration deliverables.
+   - Inline text editing with Esc/Enter commit.
+3. **Category (`w-28`)**: Rounded color-coded category badge (e.g., `Scale Integration`, `API & Services`, `Frontend & UX`).
+4. **Priority (`w-24`)**: Semantic priority badge (`Urgent`, `High`, `Med`, `Low`).
+5. **Owner / Team (`w-36`)**: Avatar with single-point accountability owner and contributor count indicator.
+6. **Schedule Range (`w-36`)**: Combined start $\rightarrow$ end date format (e.g., `04 Oct → 15 Oct`).
+7. **Duration & Effort (`w-24`)**: Dual-value cell displaying working calendar days on top and effort hours below (e.g., `10d` / `2d eff`).
+8. **Floating Contextual Actions (Hover Revealed)**:
+   - Dependency connector trigger (`Link2`).
+   - Task Details & Comments drawer trigger (`SlidersHorizontal`).
+   - Row deletion trigger (`Trash2`).
 
----
-
-### 2.3 View 3: Executive Dashboard View (`DashboardView.tsx`)
-The **Dashboard View** distills operational complexity into strategic metrics for executives, delivery heads, and project managers.
-
-#### Key Capabilities:
-1. **Executive KPI Stat Cards**:
-   - **Total Tasks & Completion**: Percentage complete across all project work packages.
-   - **Schedule Variance ($FV$)**: Net days ahead or behind the locked baseline.
-   - **Critical Path Milestone Health**: Days remaining until the nearest critical path gate.
-   - **Active Blockers & Risk Exposure**: Count of frozen tasks and high-severity unmitigated risks.
-2. **Schedule Drift Gauge**:
-   - Visual speedometer comparing active forecast against the promised baseline launch date.
-3. **Milestone Delivery Gates**:
-   - Chronological card feed displaying zero-duration milestones, assignees, and review statuses.
-4. **Active Blocker Radar**:
-   - Direct list of all blocked tasks with clickable links to the associated project risk.
+#### 2. Gantt Canvas (`GanttChart.tsx` & `GanttBar.tsx`):
+- **Sticky Two-Tier Header (`48px`)**: Top tier shows Months/Years; bottom tier shows Days/Weeks with weekend shading (`[5,6]` MENA or `[0,6]` Western).
+- **Today Marker**: 2px rose (`#f43f5e`) vertical line with a top badge marking the current UTC date across all rows.
+- **Sticky Inner Bar Labels**: Task name labels remain pinned to the left edge of the bar (`position: sticky; left: 8px`) as the timeline scrolls horizontally.
+- **Orthogonal Bezier Dependency Curves (`DependencyCurves.tsx`)**: Curved SVG vectors with arrowheads connecting finish edges of predecessors to start edges of successors. Critical path curves glow bright amber/red.
+- **200ms Glassmorphic Hover Card**: Hovering over any Gantt bar reveals a rich tooltip displaying deliverable name, dates, duration, progress percentage, assigned owner, and predecessor IDs.
 
 ---
 
-### 2.4 View 4: Project Configuration View (`ConfigView.tsx`)
-The **Config View** manages project-level delivery rules, working calendars, and lifecycle states.
+### 3.2 View 2: Team's Hub (`PeopleView.tsx`)
+A unified resource management and capacity leveling hub containing **6 dedicated sub-tabs**:
 
-#### Key Capabilities:
-1. **Working Day & Weekend Settings**:
-   - Configurable weekend days (e.g., Friday/Saturday for MENA regional schedules, or Saturday/Sunday for Western schedules).
-2. **Company Holiday Register**:
-   - Add and remove project-specific holidays. The CPM scheduling engine treats these as non-working days during forward and backward passes.
-3. **Duration Mode Toggle**:
-   - `working_days`: Tasks progress only on working calendar days.
-   - `calendar`: Tasks calculate duration consecutively.
-4. **Target Launch Date**:
-   - Sets the contractual completion deadline against which late floats are measured.
-5. **Project Lifecycle & Archival**:
-   - Soft-archive project without data loss, removing it from active selection while retaining full audit history.
-
----
-
-## 3. Specialized Drawers & Modals
-
-### 3.1 Task Details Drawer (`TaskDetailDrawer.tsx`)
-A right-side sliding drawer providing 360-degree management of any selected task:
-- **Core Metadata**: Description, category badges, start/end date pickers, duration input.
-- **Assignees & Effort Allocation (`AssigneeCombobox.tsx`)**:
-  - Primary Owner assignment.
-  - Multi-contributor effort table distributing allocated hours across team members.
-- **Dependency Manager**:
-  - Select predecessor tasks to establish Finish-to-Start relationships.
-  - Real-time cycle detection warns the user before invalid loops can be submitted.
-- **Quality Gate / Review Workflow**:
-  - Contributors click **"Request Review"** once progress reaches readiness; task enters `In Review` (`review_status = 'pending_review'`).
-  - Project Managers review the deliverable and choose **"Approve"** (advancing to `Completed` with `review_status = 'approved'`) or **"Request Changes"** (requires explanatory note and rolls status back to `In Progress`).
-  - **Anti-Self-Approval Enforcement**: Approval controls are disabled if the logged-in user is the task's author (`submitted_by_id`), primary owner (`primary_owner_id`), or an effort contributor in `task_effort_allocations`.
-- **Discussion Feed**:
-  - Chronological comment stream with author avatars, timestamps, and delete controls.
+1. **Capacity Matrix & Workload Heatmap (`capacity`)**:
+   - Weekly workload aggregation per engineer against contracted capacity hours.
+   - Color-coded capacity indicators: Green ($\le 85\%$), Amber ($86\% - 100\%$), Red ($> 100\%$ over-allocated).
+   - Integrated trigger for the **Heuristic Resource Leveling Wizard**.
+2. **Team Members Directory (`directory`)**:
+   - Profile cards showing photo avatars, job titles, department tags, skills badges, active task counts, and workload ratios.
+3. **Skills Matrix Table (`skills`)**:
+   - Cross-functional matrix mapping engineers to core competencies (e.g., `Laravel`, `React`, `PLC`, `Industrial Weighing`).
+4. **Capacity Forecast Chart (`forecast`)**:
+   - Forward-looking 4/8/12/16-week projection of resource availability and automated hiring recommendations.
+5. **Live Timesheets Grid (`timesheets`)**:
+   - Day-by-day hours logging per task with approval status indicators and floating timer widget.
+6. **Time-Off & Leave Calendar (`time_off`)**:
+   - Planned leaves and holiday schedules, integrated into the CPM working calendar.
 
 ---
 
-### 3.2 Risk Register Modal (`RiskRegisterModal.tsx`)
-A dedicated dialog for project risk governance:
-- **Risk Table**: Lists registered risks, severity scoring ($\text{Likelihood} \times \text{Impact}$), status (`open`, `mitigating`, `mitigated`, `resolved`, `closed`), and assigned risk owner.
-- **Multi-Blocker Task Linkage**: Project managers select tasks in the WBS directly from the modal; linked tasks immediately transition to `Blocked` with previous state preserved in `block_reason`.
-- **Resolution Workflow**: Marking all linked risks as `mitigated`, `resolved`, or `closed` automatically releases tasks from `Blocked` back to their prior state (`In Progress` or `Not Started`).
+### 3.3 View 3: Enterprise Projects Hub (`DashboardView.tsx`)
+Portfolio-level dashboard providing executive visibility across all projects:
+- **Project Cards**: Health indicators, code prefixes, target delivery dates, client names, and progress bars.
+- **Critical Path & Overdue Counters**: Real-time count of critical path tasks and overdue work packages per project.
+- **Portfolio Filter Pills**: Quick segmentation by `All Portfolios`, `Client Projects`, and `Internal Projects`.
+- **Direct Navigation**: One-click `Open Planner` button to jump straight into any project workspace.
 
 ---
 
-### 3.3 Weekly Report Modal (`WeeklyReportModal.tsx`)
-An automated reporting assistant generating delivery summaries:
-- **Auto-Generated Executive Summary**: Formats project progress, key milestones completed this week, critical path status, and active blockers into formatted Markdown.
-- **One-Click Export**: Copy clean Markdown to the clipboard for email or Slack updates.
+### 3.4 View 4: Financial Governance (`FinancialsView.tsx`)
+Comprehensive financial governance engine:
+- **Earned Value & Runway**: Budget at Completion ($BAC$), Planned Value ($PV$), Earned Value ($EV$), Actual Cost ($AC$), Schedule Performance Index ($SPI$), and Cost Performance Index ($CPI$).
+- **SOW Milestone Invoicing**: Milestone-based billing schedules linked to acceptance sign-offs.
+- **Expense Tracking & Currency Rates**: Multi-currency conversion and project expense logging.
+- **User Rate History & Rate Cards**: Hourly billing and internal cost rate cards per team member.
 
 ---
 
-### 3.4 New Project Modal (`NewProjectModal.tsx`)
-- Form to provision new projects with code prefixes (e.g., `PRJ-AUTO`), manager assignment, calendar presets, and initial WBS templates.
+### 3.5 View 5: Users Management (`UsersListView.tsx`)
+Enterprise directory for managing platform identities:
+- Multi-tenant user directory with search, department filtering, and status toggles (`active`, `on_leave`, `inactive`).
+- Multi-organization membership and primary role assignments.
+- Export to CSV / JSON and Bulk Invitation drawer.
+
+---
+
+### 3.6 View 6: Custom Roles & RBAC Matrix (`RolesListView.tsx` & `CreateRoleView.tsx`)
+Role-Based Access Control administration powered by Spatie Permission in multi-tenant teams mode:
+- **Roles Table**: Lists active roles, user counts, and system-protected badges (`is_system = true`).
+- **Granular Permissions Matrix**: 10 functional modules (`Projects`, `Tasks`, `Scheduling`, `Baselines`, `Risks`, `Collaboration`, `Resources`, `Financials`, `Compliance & Security`, `Integrations`).
+
+---
+
+## 4. Specialized Drawers & Modals
+
+### 4.1 Task Details & Comments Drawer (`TaskDetailDrawer.tsx`)
+Sliding right-side drawer providing full deliverable lifecycle management:
+- **Accountability & Effort**: Single-point Primary Owner assignment, estimated hours, contributor allocations, and sign-off reviewer assignment.
+- **AI Effort Suggestion**: One-click AI estimation based on category and task scope.
+- **Schedule & Baseline Dates**: Start/end pickers, duration display, and baseline variance.
+- **Threaded Discussion Feed**: Real-time comments, author avatars, and emoji reactions.
+- **Attachments with Antivirus Status**: Upload deliverables with scan verification (`clean`, `pending`, `infected`).
+- **Audit Trail Tab**: Chronological history of all edits to this specific task.
+
+### 4.2 Risk Register & Issues (RIB) Modal (`RiskRegisterModal.tsx`)
+Dedicated governance dialog for risks, issues, and blockers:
+- **Active Blockers Banner**: Count of frozen tasks requiring immediate mitigation.
+- **Risk Severity Scoring**: 3x3 matrix ($\text{Likelihood} \times \text{Impact}$).
+- **Multi-Blocker Task Linking**: Link risks directly to WBS tasks; linked tasks automatically transition to `Blocked`.
+- **Automated Unblocking**: Resolving all linked risks automatically restores tasks to their prior state.
+
+### 4.3 Weekly Delivery Executive Report Modal (`WeeklyReportModal.tsx`)
+Automated reporting assistant:
+- Generates formatted Markdown summaries: project velocity, milestones achieved, critical path health, and active blockers.
+- One-click copy for email, Slack, or executive briefings.
+
+### 4.4 Organization Tenant Settings Modal (`OrgSettingsModal.tsx`)
+Multi-tenant workspace administration:
+- **General Tab**: Organization name, industry, region, billing email, default calendar, and logo.
+- **Members & Roles Tab**: Member roster, invitation status, and role assignments.
+- **Invitations Tab**: Pending email invitations and expiration controls.
+
+### 4.5 Project Templates Gallery Modal (`TemplatePickerModal.tsx`)
+Template library with pre-configured WBS structures, calendars, and risk registers:
+- Industry presets: `Industrial Truck Scale Integration`, `Software Engineering`, `Construction Turnkey`, `Enterprise Cloud Migration`.
+
+### 4.6 Bulk Task Import Modal (`TaskImportModal.tsx`)
+5-pass dry-run CSV and JSON import engine:
+- Column auto-detection, schema validation, and cycle detection before database commit.
+
+### 4.7 Command Palette (`⌘K` / `Ctrl+K`) (`CommandBarModal.tsx`)
+Quick actions launcher:
+- Search tasks, jump between views, switch projects, and execute keyboard shortcuts.
+
+### 4.8 AI Project Copilot Assistant Drawer (`AiAssistantDrawer.tsx`)
+Interactive project assistant:
+- Natural language queries regarding schedule slippage, float degradation, and bottleneck resolution.
+
+### 4.9 Notification Center Drawer (`NotificationDrawer.tsx`)
+Slide-out notifications inbox:
+- Mentions, task assignments, blocker alerts, and review requests with one-click mark-as-read.
+
+### 4.10 System Installation View (`InstallView.tsx`)
+First-run setup wizard (`/install`):
+- Checks database connectivity, Redis health, storage permissions, and provisions the initial Super Admin.
+
+---
+
+## 5. Visual Reference Catalogue (33 System Screenshots)
+
+All screenshots are stored in [`screenshots/`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots) at 1920x1080 resolution:
+
+| # | Screenshot Filename | Screen Description |
+| :---: | :--- | :--- |
+| **01** | [`01_auth_signin_gateway.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/01_auth_signin_gateway.png) | Sign-in portal with world map backdrop & credentials card |
+| **02** | [`02_planner_wbs_gantt_split.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/02_planner_wbs_gantt_split.png) | Consolidated 2-bar headers, 46/54 split-pane with populated WBS & Gantt bars |
+| **03** | [`03_planner_wbs_full_grid.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/03_planner_wbs_full_grid.png) | Full WBS data grid (Grid layout preset) |
+| **04** | [`04_planner_gantt_full_timeline.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/04_planner_gantt_full_timeline.png) | Full Gantt timeline canvas (Gantt layout preset) |
+| **05** | [`05_planner_gantt_bar_hover_card.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/05_planner_gantt_bar_hover_card.png) | 200ms glassmorphic hover card & cross-pane row highlight |
+| **06** | [`06_planner_task_detail_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/06_planner_task_detail_drawer.png) | Slide-out task details, effort allocation, dependencies & comments drawer |
+| **07** | [`07_planner_dark_mode.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/07_planner_dark_mode.png) | Dark mode theme across the entire planner workspace |
+| **08** | [`08_team_hub_capacity_matrix.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/08_team_hub_capacity_matrix.png) | Capacity matrix, workload heatmap & leveling wizard trigger |
+| **09** | [`09_team_hub_members_directory.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/09_team_hub_members_directory.png) | Team directory cards with avatars, roles, skills, and workload ratios |
+| **10** | [`10_team_hub_skills_matrix.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/10_team_hub_skills_matrix.png) | Skills coverage matrix table |
+| **11** | [`11_team_hub_capacity_forecast.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/11_team_hub_capacity_forecast.png) | Capacity forecast chart & hiring recommendations |
+| **12** | [`12_team_hub_live_timesheets.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/12_team_hub_live_timesheets.png) | Live timesheets grid & hours logging |
+| **13** | [`13_team_hub_time_off_calendar.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/13_team_hub_time_off_calendar.png) | Team time-off and leave calendar |
+| **14** | [`14_users_management_directory.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/14_users_management_directory.png) | Users directory table with department filters & status |
+| **15** | [`15_users_invite_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/15_users_invite_drawer.png) | User invitation drawer with organization role assignment |
+| **16** | [`16_roles_management_overview.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/16_roles_management_overview.png) | Custom roles management table with system-protected badges |
+| **17** | [`17_roles_create_new_role_matrix.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/17_roles_create_new_role_matrix.png) | Role creation form with granular 10-module permission matrix |
+| **18** | [`18_financials_budget_invoicing.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/18_financials_budget_invoicing.png) | Financial governance dashboard, burn rate, and SOW milestone invoicing |
+| **19** | [`19_projects_portfolio_dashboard.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/19_projects_portfolio_dashboard.png) | Enterprise projects hub cards with KPIs, health, and progress |
+| **20** | [`20_config_general_and_calendar.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/20_config_general_and_calendar.png) | Working days & company holiday calendar settings |
+| **21** | [`21_config_wbs_categories.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/21_config_wbs_categories.png) | WBS categories and color definitions |
+| **22** | [`22_config_baseline_management.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/22_config_baseline_management.png) | Baseline lock and schedule drift variance audit |
+| **23** | [`23_risk_register_rib_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/23_risk_register_rib_modal.png) | Risk, Issue & Blocker (RIB) register modal with active blockers |
+| **24** | [`24_weekly_delivery_report_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/24_weekly_delivery_report_modal.png) | Weekly delivery executive status report modal |
+| **25** | [`25_org_settings_general_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/25_org_settings_general_modal.png) | Organization tenant settings modal (General tab) |
+| **26** | [`26_org_settings_members_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/26_org_settings_members_modal.png) | Organization members & roles assignment tab |
+| **27** | [`27_template_picker_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/27_template_picker_modal.png) | Project templates gallery modal with industry presets |
+| **28** | [`28_task_bulk_import_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/28_task_bulk_import_modal.png) | Bulk task import dry-run modal with column mapping |
+| **29** | [`29_new_project_creation_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/29_new_project_creation_modal.png) | Create blank project modal |
+| **30** | [`30_ai_copilot_assistant_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/30_ai_copilot_assistant_drawer.png) | AI Project Copilot assistant drawer |
+| **31** | [`31_command_palette_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/31_command_palette_modal.png) | Command Palette modal (`⌘K` / `Ctrl+K` quick actions launcher) |
+| **32** | [`32_notifications_inbox_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/32_notifications_inbox_drawer.png) | Notification center inbox drawer |

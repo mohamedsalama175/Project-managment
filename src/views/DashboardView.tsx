@@ -22,6 +22,7 @@ import { NewProjectModal } from '../components/layout/NewProjectModal';
 import { TemplatePickerModal } from '../components/templates/TemplatePickerModal';
 import { Modal } from '../components/common/Modal';
 import { getTodayUTC } from '../utils/dateUtils';
+import { calculateCPM } from '../utils/cpmUtils';
 import { Project, Task } from '../types';
 
 export const DashboardView: React.FC = () => {
@@ -135,6 +136,11 @@ export const DashboardView: React.FC = () => {
           const overdueCount = tasks.filter(
             (t: Task) => t.end && t.end < todayStr && (t.pct || 0) < 100
           ).length;
+          const cpmMap = calculateCPM(tasks);
+          let criticalCount = 0;
+          cpmMap.forEach((info) => {
+            if (info.isCritical || info.totalFloat <= 0) criticalCount++;
+          });
 
           const progress = tasksCount
             ? Math.round(
@@ -193,14 +199,26 @@ export const DashboardView: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Blocker Alert Banner */}
+                {/* Blocker Alert Banner (Clickable to filtered planner) */}
                 {activeBlockers.length > 0 && (
-                  <div className="p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-[11px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveProject(proj.id);
+                      setActiveView('planner');
+                      if (typeof window !== 'undefined') {
+                        window.history.pushState({}, '', `/planner?project=${proj.id}&filter=blocked`);
+                        window.dispatchEvent(new Event('popstate'));
+                      }
+                    }}
+                    className="w-full text-left p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-[11px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5 hover:bg-red-500/20 transition-colors cursor-pointer"
+                    title="View blocked tasks in Planner"
+                  >
                     <AlertOctagon className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">
                       {activeBlockers.length} Blocker(s): {activeBlockers[0].title}
                     </span>
-                  </div>
+                  </button>
                 )}
               </div>
 
@@ -210,9 +228,28 @@ export const DashboardView: React.FC = () => {
                   <span className="text-slate-600 dark:text-slate-300">
                     Overall Progress
                   </span>
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                    {progress}%
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {criticalCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveProject(proj.id);
+                          setActiveView('planner');
+                          if (typeof window !== 'undefined') {
+                            window.history.pushState({}, '', `/planner?project=${proj.id}&filter=critical`);
+                            window.dispatchEvent(new Event('popstate'));
+                          }
+                        }}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors cursor-pointer"
+                        title="View Critical Path tasks"
+                      >
+                        Critical Path ({criticalCount})
+                      </button>
+                    )}
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                      {progress}%
+                    </span>
+                  </div>
                 </div>
 
                 {/* Progress bar */}
@@ -227,14 +264,26 @@ export const DashboardView: React.FC = () => {
                 <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500 dark:text-slate-400">
                   <span className="flex items-center gap-1 font-semibold">
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                    {completedCount} / {tasksCount} Tasks
+                    {completedCount} / {tasksCount} Completed
                   </span>
 
                   {overdueCount > 0 ? (
-                    <span className="flex items-center gap-1 font-bold text-red-500">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveProject(proj.id);
+                        setActiveView('planner');
+                        if (typeof window !== 'undefined') {
+                          window.history.pushState({}, '', `/planner?project=${proj.id}&filter=overdue`);
+                          window.dispatchEvent(new Event('popstate'));
+                        }
+                      }}
+                      className="flex items-center gap-1 font-bold text-red-500 hover:underline cursor-pointer"
+                      title="Filter overdue tasks in Planner"
+                    >
                       <AlertTriangle className="w-3.5 h-3.5" />
                       {overdueCount} Overdue
-                    </span>
+                    </button>
                   ) : (
                     <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
                       On Schedule

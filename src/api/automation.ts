@@ -67,27 +67,27 @@ export const automationApi = {
     if (projectId) params.append('project_id', projectId);
     if (enabled !== undefined) params.append('enabled', String(enabled));
     const qs = params.toString() ? `?${params.toString()}` : '';
-    return apiClient.get<{ rules: AutomationRule[] }>(`/api/v1/automation/rules${qs}`);
+    return apiClient.get<{ rules: AutomationRule[] }>(`/automation/rules${qs}`);
   },
 
   createRule: async (data: Partial<AutomationRule>): Promise<{ rule: AutomationRule; message: string }> => {
-    return apiClient.post<{ rule: AutomationRule; message: string }>('/api/v1/automation/rules', data);
+    return apiClient.post<{ rule: AutomationRule; message: string }>('/automation/rules', data);
   },
 
   getRule: async (id: string): Promise<{ rule: AutomationRule; recent_runs: AutomationRun[] }> => {
-    return apiClient.get<{ rule: AutomationRule; recent_runs: AutomationRun[] }>(`/api/v1/automation/rules/${id}`);
+    return apiClient.get<{ rule: AutomationRule; recent_runs: AutomationRun[] }>(`/automation/rules/${id}`);
   },
 
   updateRule: async (id: string, data: Partial<AutomationRule>): Promise<{ rule: AutomationRule; message: string }> => {
-    return apiClient.put<{ rule: AutomationRule; message: string }>(`/api/v1/automation/rules/${id}`, data);
+    return apiClient.put<{ rule: AutomationRule; message: string }>(`/automation/rules/${id}`, data);
   },
 
   deleteRule: async (id: string): Promise<{ message: string }> => {
-    return apiClient.delete<{ message: string }>(`/api/v1/automation/rules/${id}`);
+    return apiClient.delete<{ message: string }>(`/automation/rules/${id}`);
   },
 
   toggleRule: async (id: string): Promise<{ rule: AutomationRule; message: string }> => {
-    return apiClient.patch<{ rule: AutomationRule; message: string }>(`/api/v1/automation/rules/${id}/toggle`, {});
+    return apiClient.patch<{ rule: AutomationRule; message: string }>(`/automation/rules/${id}/toggle`, {});
   },
 
   getRuns: async (params?: { rule_id?: string; status?: string; page?: number }): Promise<PaginatedResponse<AutomationRun>> => {
@@ -96,18 +96,18 @@ export const automationApi = {
     if (params?.status) query.append('status', params.status);
     if (params?.page) query.append('page', String(params.page));
     const qs = query.toString() ? `?${query.toString()}` : '';
-    return apiClient.get<PaginatedResponse<AutomationRun>>(`/api/v1/automation/runs${qs}`);
+    return apiClient.get<PaginatedResponse<AutomationRun>>(`/automation/runs${qs}`);
   },
 
   getRun: async (id: string): Promise<{ run: AutomationRun }> => {
-    return apiClient.get<{ run: AutomationRun }>(`/api/v1/automation/runs/${id}`);
+    return apiClient.get<{ run: AutomationRun }>(`/automation/runs/${id}`);
   },
 
   getTemplates: async (): Promise<{ templates: AutomationTemplate[] }> => {
-    return apiClient.get<{ templates: AutomationTemplate[] }>('/api/v1/automation/templates');
+    return apiClient.get<{ templates: AutomationTemplate[] }>('/automation/templates');
   },
 
   instantiateTemplate: async (templateId: string, payload?: { project_id?: string; name?: string }): Promise<{ rule: AutomationRule; message: string }> => {
-    return apiClient.post<{ rule: AutomationRule; message: string }>(`/api/v1/automation/templates/${templateId}/instantiate`, payload || {});
+    return apiClient.post<{ rule: AutomationRule; message: string }>(`/automation/templates/${templateId}/instantiate`, payload || {});
   },
 };

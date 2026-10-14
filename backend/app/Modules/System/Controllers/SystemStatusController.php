@@ -26,11 +26,12 @@ class SystemStatusController extends Controller
             ]);
         }
 
-        $userCount = User::count();
-        $adminExists = User::whereHas('roles', function ($query) {
-            $query->where('name', 'admin');
-        })->exists();
+        $adminExists = \Illuminate\Support\Facades\DB::table('model_has_roles')
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->where('roles.name', 'admin')
+            ->exists();
 
+        $userCount = User::count();
         $installed = \App\Models\InstallState::isInstalled() || ($userCount > 0 && $adminExists);
 
         return response()->json([

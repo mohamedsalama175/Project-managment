@@ -17,7 +17,26 @@ class BudgetController extends Controller
 
     public function show(Request $request, string $projectId): JsonResponse
     {
-        $project = Project::with('budgetRevisions.user')->findOrFail($projectId);
+        $user = $request->user();
+        $tenantId = app(\App\Modules\Tenancy\Services\TenantManager::class)->getTenantId() ?? $user->default_organization_id;
+
+        $rawProject = Project::withoutGlobalScopes()->find($projectId);
+        if ($rawProject && $rawProject->organization_id !== $tenantId) {
+            abort(404, 'Project not found.');
+        }
+
+        $project = Project::with('budgetRevisions.user')->find($projectId);
+        if (!$project) {
+            return response()->json([
+                'project_id' => $projectId,
+                'budget_amount' => 0.0,
+                'budget_currency' => 'USD',
+                'budget_type' => 'fixed',
+                'billing_currency' => 'USD',
+                'revisions' => [],
+            ]);
+        }
+
         $this->authorize('view', $project);
 
         return response()->json([

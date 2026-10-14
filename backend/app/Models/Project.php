@@ -18,6 +18,11 @@ class Project extends Model
 
     protected $guarded = [];
 
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        return $query->where($field ?? $this->getRouteKeyName(), $value);
+    }
+
     protected function casts(): array
     {
         return [
@@ -51,6 +56,18 @@ class Project extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class, 'project_id')->orderBy('order_index');
+    }
+
+    public function getProgressPctAttribute(): int
+    {
+        if (array_key_exists('progress_pct', $this->attributes) && $this->attributes['progress_pct'] !== null) {
+            return (int) $this->attributes['progress_pct'];
+        }
+        $tasks = $this->tasks;
+        if ($tasks->isEmpty()) {
+            return 0;
+        }
+        return (int) round($tasks->avg('pct') ?? 0);
     }
 
     public function risks(): HasMany
@@ -95,6 +112,17 @@ class Project extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (Project $project) {
+            if (empty($project->config)) {
+                $project->config = [
+                    'weekendDays' => [5, 6],
+                    'holidays' => [],
+                    'autoSchedule' => true,
+                    'durationMode' => 'working_days',
+                ];
+            }
+        });
+
         static::deleting(function (Project $project) {
             $holdService = app(\App\Modules\Compliance\Services\LegalHoldService::class);
             if ($holdService->isEntityHeld($project->organization_id, 'Project', $project->id)) {

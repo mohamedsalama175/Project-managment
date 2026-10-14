@@ -217,10 +217,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={() => {
-        // Only allow closing if already completed
-        if (progress?.is_completed) onClose();
-      }}
+      onClose={onClose}
       title={isOwner ? 'Workspace Setup & Onboarding' : 'Welcome to DeliverOps'}
       description={`Step ${currentStep} of ${totalSteps}: Follow the interactive setup to tailor your delivery platform.`}
       maxWidth="max-w-2xl"

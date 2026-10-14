@@ -9,15 +9,19 @@ interface DependencyCurvesProps {
   rowHeight: number;
   criticalTaskIds: Set<string>;
   highlightCritical: boolean;
+  hoveredTaskId?: string | null;
+  hoveredPredId?: string | null;
 }
 
 export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
   tasks,
   timelineStart,
   dayWidth,
-  rowHeight,
+  rowHeight = 40,
   criticalTaskIds,
   highlightCritical,
+  hoveredTaskId,
+  hoveredPredId,
 }) => {
   const taskIndexMap = new Map<string, number>();
   const taskMap = new Map<string, Task>();
@@ -28,12 +32,13 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
   });
 
   const timelineStartStr = timelineStart.toISOString().slice(0, 10);
-  const barCenterYOffset = 18; // 5px top + 13px (half of 26px bar height)
+  const barCenterYOffset = rowHeight / 2; // Exact center of 40px row = 20px
 
   const curves: {
     key: string;
     path: string;
     isCritical: boolean;
+    isHighlighted: boolean;
   }[] = [];
 
   tasks.forEach((succ, succIdx) => {
@@ -48,16 +53,16 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
       const predStartDiff = diffCalendarDays(timelineStartStr, pred.start);
       const predDuration = Math.max(1, diffCalendarDays(pred.start, pred.end) + 1);
       const x1 = pred.isMilestone
-        ? predStartDiff * dayWidth + dayWidth / 2 + 10
+        ? predStartDiff * dayWidth + 24
         : (predStartDiff + predDuration) * dayWidth;
 
       // Succ start X: left edge of successor bar
       const succStartDiff = diffCalendarDays(timelineStartStr, succ.start);
       const x2 = succ.isMilestone
-        ? succStartDiff * dayWidth + dayWidth / 2 - 10
+        ? succStartDiff * dayWidth
         : succStartDiff * dayWidth;
 
-      // Y positions: center of each bar
+      // Y positions: center of each row
       const y1 = predIdx * rowHeight + barCenterYOffset;
       const y2 = succIdx * rowHeight + barCenterYOffset;
 
@@ -66,6 +71,12 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
         criticalTaskIds.has(pred.id) &&
         criticalTaskIds.has(succ.id);
 
+      const isHighlighted =
+        hoveredTaskId === pred.id ||
+        hoveredTaskId === succ.id ||
+        hoveredPredId === pred.id ||
+        hoveredPredId === succ.id;
+
       const dx = x2 - x1;
       const dy = y2 - y1;
       const goingDown = dy >= 0;
@@ -73,13 +84,11 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
       let path = '';
 
       if (dx >= 16) {
-        // Forward flow with comfortable gap:
-        // Horizontal from x1 -> turn down/up at midX -> turn horizontal into x2
+        // Forward orthogonal flow with clean curve
         const midX = x1 + dx / 2;
-        const r = Math.min(5, Math.abs(dy) / 2, dx / 4);
+        const r = Math.min(6, Math.abs(dy) / 2, dx / 4);
 
         if (Math.abs(dy) < 2) {
-          // Same row (direct horizontal line)
           path = `M ${x1} ${y1} L ${x2} ${y2}`;
         } else if (goingDown) {
           path = [
@@ -101,9 +110,8 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
           ].join(' ');
         }
       } else {
-        // Backward or tight/overlapping flow:
-        // Step out 10px right from pred, route via horizontal gutter between rows, then step in 10px left to succ
-        const stub = 10;
+        // Backward or tight/overlapping flow: step out 12px right, route via gutter
+        const stub = 12;
         const r = 4;
         const gutterY = goingDown
           ? y1 + rowHeight / 2
@@ -142,6 +150,7 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
         key: `${predId}->${succ.id}`,
         path,
         isCritical,
+        isHighlighted,
       });
     });
   });
@@ -152,7 +161,7 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
       style={{ width: '100%', height: `${tasks.length * rowHeight}px` }}
     >
       <defs>
-        {/* Normal arrow marker */}
+        {/* Default slate arrow marker */}
         <marker
           id="arrowhead-default"
           markerWidth="6"
@@ -163,11 +172,23 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
         >
           <polygon
             points="0 0.5, 6 3, 0 5.5"
-            className="fill-slate-400 dark:fill-slate-500"
+            fill="#94a3b8"
           />
         </marker>
 
-        {/* Critical arrow marker */}
+        {/* Hovered / Active Emerald arrow marker */}
+        <marker
+          id="arrowhead-hover"
+          markerWidth="7"
+          markerHeight="7"
+          refX="6"
+          refY="3.5"
+          orient="auto"
+        >
+          <polygon points="0 0.5, 7 3.5, 0 6.5" fill="#059669" />
+        </marker>
+
+        {/* Critical Red arrow marker */}
         <marker
           id="arrowhead-critical"
           markerWidth="7"
@@ -180,24 +201,35 @@ export const DependencyCurves: React.FC<DependencyCurvesProps> = ({
         </marker>
       </defs>
 
-      {curves.map((curve) => (
-        <path
-          key={curve.key}
-          d={curve.path}
-          fill="none"
-          stroke={curve.isCritical ? '#ef4444' : '#94a3b8'}
-          strokeWidth={curve.isCritical ? 2.2 : 1.4}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          opacity={curve.isCritical ? 1 : 0.75}
-          markerEnd={
-            curve.isCritical
-              ? 'url(#arrowhead-critical)'
-              : 'url(#arrowhead-default)'
-          }
-          className={curve.isCritical ? 'animate-pulse' : ''}
-        />
-      ))}
+      {curves.map((curve) => {
+        const strokeColor = curve.isHighlighted
+          ? '#059669'
+          : curve.isCritical
+          ? '#ef4444'
+          : '#94a3b8';
+
+        const strokeWidth = curve.isHighlighted ? 2.5 : curve.isCritical ? 2 : 1.5;
+        const marker = curve.isHighlighted
+          ? 'url(#arrowhead-hover)'
+          : curve.isCritical
+          ? 'url(#arrowhead-critical)'
+          : 'url(#arrowhead-default)';
+
+        return (
+          <path
+            key={curve.key}
+            d={curve.path}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            opacity={curve.isHighlighted ? 1 : curve.isCritical ? 0.95 : 0.8}
+            markerEnd={marker}
+            className={`transition-colors duration-150 ${curve.isCritical ? 'animate-pulse' : ''}`}
+          />
+        );
+      })}
     </svg>
   );
 };

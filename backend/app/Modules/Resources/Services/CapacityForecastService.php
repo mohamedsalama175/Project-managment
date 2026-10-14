@@ -201,12 +201,47 @@ class CapacityForecastService
             ];
         }
 
+        $totalBaseCapacity = 0.0;
+        $totalEffectiveCapacity = 0.0;
+        $totalAllocatedHours = 0.0;
+        $overallocatedWeeksCount = 0;
+        $zeroCapacityWeeksCount = 0;
+
+        foreach ($userData as $u) {
+            foreach ($u['weeks'] as $w) {
+                $totalBaseCapacity += (float) ($w['base_capacity_hours'] ?? 0);
+                $totalEffectiveCapacity += (float) ($w['effective_capacity_hours'] ?? 0);
+                $totalAllocatedHours += (float) ($w['allocated_hours'] ?? 0);
+                if (($w['status'] ?? '') === 'over' || ($w['load_percent'] ?? 0) > 100) {
+                    $overallocatedWeeksCount++;
+                }
+                if (($w['effective_capacity_hours'] ?? 0) <= 0) {
+                    $zeroCapacityWeeksCount++;
+                }
+            }
+        }
+
+        $averageLoad = $totalEffectiveCapacity > 0
+            ? round(($totalAllocatedHours / $totalEffectiveCapacity) * 100, 1)
+            : 0.0;
+
         return [
             'organization_id' => $orgId,
+            'generated_at' => now()->toIso8601String(),
+            'weeks' => $weeks,
             'weeks_count' => $weeks,
+            'version' => (string) now()->timestamp,
             'range' => [
                 'from' => $forecastStart,
                 'to' => $forecastEnd,
+            ],
+            'summary' => [
+                'total_base_capacity' => round($totalBaseCapacity, 2),
+                'total_effective_capacity' => round($totalEffectiveCapacity, 2),
+                'total_allocated_hours' => round($totalAllocatedHours, 2),
+                'average_load_percent' => $averageLoad,
+                'overallocated_weeks_count' => $overallocatedWeeksCount,
+                'zero_capacity_weeks_count' => $zeroCapacityWeeksCount,
             ],
             'users' => $userData,
         ];

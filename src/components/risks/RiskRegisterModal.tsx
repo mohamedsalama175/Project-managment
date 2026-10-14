@@ -26,13 +26,17 @@ import { EmptyState } from '../common/EmptyState';
 import { getTodayUTC } from '../../utils/dateUtils';
 
 interface RiskRegisterModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  open?: boolean;
+  onClose?: () => void;
+  risks?: (Partial<ProjectRisk> & { id: string; title: string; code?: string })[];
 }
 
 export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
   isOpen,
+  open,
   onClose,
+  risks: propRisks,
 }) => {
   const {
     projects,
@@ -43,8 +47,9 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
     deleteRisk,
   } = useProjectStore();
 
-  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
-  const risks = activeProject?.risks || [];
+  const modalOpen = open ?? isOpen ?? false;
+  const activeProject = (projects || []).find((p) => p.id === activeProjectId) || (projects && projects[0]) || null;
+  const risks = (propRisks ?? (activeProject?.risks || [])) as ProjectRisk[];
 
   const [typeFilter, setTypeFilter] = useState<'all' | RIBType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | RIBStatus>('all');
@@ -66,7 +71,7 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
   const [newLinkedTasks, setNewLinkedTasks] = useState<string[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  if (!modalOpen) return null;
 
   const todayStr = getTodayUTC();
 
@@ -199,7 +204,7 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
                   Risk, Issue & Blocker (RIB) Register
                 </h2>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold">
-                  {activeProject.code}
+                  {activeProject?.code || 'PROJ'}
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -523,7 +528,7 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
                 compact
                 icon={<ShieldAlert className="w-6 h-6 text-emerald-500" />}
                 title="Zero Delivery Impediments"
-                description="No risks, issues, or blockers have been registered for this project yet. Proactively log uncertainties to track root cause and accountability."
+                description="No risks registered for this project yet. Proactively log uncertainties to track root cause and accountability."
                 primaryAction={{
                   label: 'Log New Risk / Blocker',
                   onClick: () => setIsFormOpen(true),
@@ -542,11 +547,15 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
           ) : (
             <div className="space-y-3">
               {filteredRisks.map((risk) => {
-                const owner = teamMembers.find((m) => m.id === risk.ownerId);
-                const isOverdue = risk.dueDate < todayStr && risk.status !== 'resolved';
-                const linkedTasks = activeProject.tasks.filter((t) =>
-                  risk.linkedTaskIds.includes(t.id)
-                );
+                const owner = (teamMembers || []).find((m) => m.id === risk.ownerId);
+                const riskDueDate = risk.dueDate || todayStr;
+                const riskStatus = risk.status || 'open';
+                const riskType = risk.type || 'risk';
+                const riskSeverity = risk.severity || 'medium';
+                const isOverdue = riskDueDate < todayStr && riskStatus !== 'resolved';
+                const linkedTasks = activeProject?.tasks
+                  ? activeProject.tasks.filter((t) => (risk.linkedTaskIds || []).includes(t.id))
+                  : [];
 
                 return (
                   <div
@@ -561,15 +570,20 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        {getTypeBadge(risk.type)}
-                        {getSeverityBadge(risk.severity)}
-                        {risk.type === 'risk' && risk.likelihood && (
+                        {risk.code && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase">
+                            {risk.code}
+                          </span>
+                        )}
+                        {getTypeBadge(riskType)}
+                        {getSeverityBadge(riskSeverity)}
+                        {riskType === 'risk' && risk.likelihood && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20 uppercase">
                             Likelihood: {risk.likelihood}
                           </span>
                         )}
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 capitalize">
-                          {risk.status}
+                          {riskStatus}
                         </span>
                       </div>
 
@@ -582,11 +596,11 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
                           }`}
                         >
                           <Calendar className="w-3.5 h-3.5" />
-                          <span>Due: {risk.dueDate}</span>
+                          <span>Due: {riskDueDate}</span>
                           {isOverdue && <span>(Overdue!)</span>}
                         </div>
 
-                        {risk.status !== 'resolved' && (
+                        {riskStatus !== 'resolved' && (
                           <ClayButton
                             size="sm"
                             variant="primary"
@@ -660,10 +674,10 @@ export const RiskRegisterModal: React.FC<RiskRegisterModalProps> = ({
                               <img
                                 src={owner.photoUrl}
                                 alt={owner.name}
-                                className="w-4 h-4 rounded-full object-cover"
+                                className="w-4 h-4 rounded-full object-cover object-center shrink-0 aspect-square"
                               />
                             ) : (
-                              <span className="w-4 h-4 rounded-full bg-slate-600 text-[8px] font-bold text-white flex items-center justify-center">
+                              <span className="w-4 h-4 rounded-full bg-slate-600 text-[8px] font-bold text-white flex items-center justify-center shrink-0 aspect-square">
                                 {owner.name.substring(0, 1).toUpperCase()}
                               </span>
                             )}

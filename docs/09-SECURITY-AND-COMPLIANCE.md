@@ -2,8 +2,9 @@
 
 > **Document ID:** `DOC-09-SECURITY-AND-COMPLIANCE`  
 > **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Standards:** OWASP Top 10 (2021), SOC 2 Type II, GDPR (EU 2016/679), ISO/IEC 27001
+> **Version:** 2.2.0  
+> **Standards:** OWASP Top 10 (2021), SOC 2 Type II, GDPR (EU 2016/679), ISO/IEC 27001  
+> **Harmonized With:** [01-BUSINESS](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/01-BUSINESS-AND-DOMAIN.md), [03-CRUD](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/03-CRUD-SPECIFICATIONS.md), [05-BACKEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/05-BACKEND-ARCHITECTURE.md), [06-API](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/06-API-REFERENCE.md), [08-DEPLOYMENT](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/08-DEPLOYMENT-AND-OPERATIONS.md), [13-ADR](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/13-ADR-LOG.md), [14-ERROR-CODES](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/14-ERROR-CODES.md)
 
 ---
 
@@ -263,6 +264,36 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
 add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.deliverops.internal;" always;
 ```
 
+#### Application-Level Enforcement: `SecurityHeadersMiddleware`
+In addition to the edge proxy, the Laravel application enforces security headers in `App\Http\Middleware\SecurityHeadersMiddleware`:
+
+```php
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+class SecurityHeadersMiddleware
+{
+    public function handle(Request $request, Closure $next): Response
+    {
+        $response = $next($request);
+
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('X-Frame-Options', 'DENY');
+        $response->headers->set('X-XSS-Protection', '1; mode=block');
+        $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
+        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+        $response->headers->set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' ws: wss:;");
+
+        return $response;
+    }
+}
+```
+This guarantees defense-in-depth even when running behind non-terminating proxies or during containerized testing.
+
 ### 5.2 SQL Injection & Parameterized Execution
 - **Strict Eloquent & PDO Usage**: Direct variable concatenation inside `DB::raw()` is strictly prohibited by automated static analysis (`PHPStan` + custom architecture rule).
 - All queries utilize prepared statements with named or positional bindings.
@@ -300,3 +331,30 @@ When an administrative user triggers an account erasure:
 - **At Rest**: 
   - Database volumes and automated backup archives use **AES-256** encryption.
   - File attachments uploaded to storage disks are encrypted using server-side keys before storage.
+  - SSO signing keys, IdP X.509 certificates, OAuth secrets, and AI API keys use Eloquent `'encrypted'` casts.
+
+### 6.3 Cryptographic Audit Log Hash Chain (ADR-048)
+To satisfy SOC 2 Type II and HIPAA requirements for tamper-evident logging:
+- Every `audit_logs` row includes `previous_hash` and `row_hash` computed over canonical block data:
+  $$\text{row\_hash} = \text{SHA-256}(prev\_hash + ":" + org\_id + ":" + entity\_type + ":" + entity\_id + ":" + actor\_id + ":" + action + ":" + created\_at)$$
+- The initial genesis block per organization uses 64 zeros (`0000...0000`).
+- Concurrency and sequence integrity are preserved via per-organization pessimistic locking (`lockForUpdate()`) on `audit_chain_state`.
+- Continuous integrity verification endpoint: `GET /api/v1/audit/verify` supports cursor-based paginated audits to detect middle-row deletion or modification.
+
+### 6.4 Enforced Sovereign Data Residency (ADR-049)
+- **Immutability Invariant**: `Organization.region` cannot be changed after initial establishment.
+- **Cluster Boundary Enforcement**: The `EnforceDataResidency` middleware cross-references `config('app.region')` against `$org->region`. Any cross-region request terminates immediately with **HTTP 451 (Unavailable For Legal Reasons)**.
+
+### 6.5 Regulatory Legal Holds & E-Discovery
+- **Active Hold Protection**: When litigation holds are issued (`POST /api/v1/compliance/legal-holds`), model deletion hooks block all hard/soft deletion on held projects, tasks, or users with a domain exception (`HTTP 423 Locked`).
+- **Hierarchical Hold Cascade**: A legal hold placed on a `Project` automatically extends evidentiary protection down to all member tasks and associated comments.
+- **E-Discovery Archive**: Standardized JSON bundles generated via `GET /api/v1/compliance/ediscovery/{holdId}` include tasks, comments, time entries, and tamper-verified audit records.
+
+### 6.6 Enterprise Identity Federation & RFC 7644 SCIM 2.0 (ADR-049)
+- **SAML 2.0 & OIDC**: Delegated enterprise SSO authentication with automatic user account mapping.
+- **SCIM 2.0 Directory Sync**: Automated lifecycle de-provisioning and group sync at `/scim/v2/Users` and `/scim/v2/Groups` secured via `auth.scim_token` bearer authorization.
+
+### 6.7 Mobile Security Posture (ADR-050)
+- **OAuth 2.0 PKCE**: Native mobile applications authenticate strictly via Authorization Code Flow with Proof Key for Code Exchange (S256), storing refresh tokens in OS-native secure hardware keychains (Keychain / Keystore).
+- **Biometric Challenge**: Face ID / Fingerprint unlock required for local credential decryption.
+

@@ -35,7 +35,9 @@ class RolePermissionController extends Controller
     {
         $this->authorize('viewAny', Role::class);
 
-        $permissions = Permission::all()
+        $allPermissions = Permission::all();
+
+        $permissions = $allPermissions
             ->groupBy('group_name')
             ->map(function ($group) {
                 return $group->map(function ($p) {
@@ -48,8 +50,130 @@ class RolePermissionController extends Controller
                 });
             });
 
+        // 3-tier hierarchy: Module -> Subject -> Permissions
+        $hierarchyDefinitions = [
+            'projects' => [
+                'name' => 'Projects & Scheduling',
+                'icon' => 'FolderKanban',
+                'subjects' => [
+                    'Project Management' => ['projects.view', 'projects.create', 'projects.edit', 'projects.archive', 'projects.import'],
+                    'Baselines & Milestones' => ['baselines.lock'],
+                ],
+            ],
+            'tasks' => [
+                'name' => 'Tasks & WBS',
+                'icon' => 'ListTodo',
+                'subjects' => [
+                    'WBS Hierarchy' => ['tasks.create', 'tasks.edit_details', 'tasks.delete', 'tasks.view.all'],
+                    'Execution & Progress' => ['tasks.list', 'tasks.show', 'tasks.update_progress', 'tasks.edit_own_progress'],
+                    'Reviews & Approvals' => ['tasks.request_review', 'tasks.approve_review'],
+                    'Task Collaboration' => ['tasks.comment', 'comments.create'],
+                ],
+            ],
+            'risks' => [
+                'name' => 'Risks & Governance',
+                'icon' => 'ShieldAlert',
+                'subjects' => [
+                    'Risk Register & Mitigation' => ['risks.manage'],
+                ],
+            ],
+            'financials' => [
+                'name' => 'Financials & Invoicing',
+                'icon' => 'DollarSign',
+                'subjects' => [
+                    'Budgets & EVM' => ['budget.view', 'budget.manage', 'evm.view'],
+                    'Labor Rates & Costing' => ['rates.view', 'rates.manage', 'costs.view'],
+                    'Expense Claims' => ['expenses.create', 'expenses.view', 'expenses.approve', 'expenses.reimburse'],
+                    'Invoices & Billing' => ['invoices.view', 'invoices.manage', 'currencies.manage', 'reports.generate'],
+                ],
+            ],
+            'users' => [
+                'name' => 'Team & Resource Capacity',
+                'icon' => 'Users',
+                'subjects' => [
+                    'Users Directory' => ['users.view', 'users.create', 'users.edit', 'users.delete'],
+                    'Roles & Permissions' => ['roles.view', 'roles.manage'],
+                ],
+            ],
+            'automation' => [
+                'name' => 'Automation & Rules Engine',
+                'icon' => 'Zap',
+                'subjects' => [
+                    'Automation Rules & Triggers' => ['automation.view', 'automation.manage', 'automation.execute'],
+                ],
+            ],
+            'compliance' => [
+                'name' => 'Compliance & Security',
+                'icon' => 'ShieldCheck',
+                'subjects' => [
+                    'Audit Trail & Verification' => ['audit.view', 'audit.verify'],
+                    'GDPR & DSAR' => ['compliance.view', 'compliance.manage', 'compliance.dsar'],
+                    'Legal Holds' => ['legal_holds.view', 'legal_holds.manage', 'legal_holds.export'],
+                ],
+            ],
+            'integrations' => [
+                'name' => 'Integrations & Developer APIs',
+                'icon' => 'Plug',
+                'subjects' => [
+                    'API Keys & Webhooks' => ['api_keys.manage', 'oauth_apps.manage', 'webhooks.manage'],
+                    'Connected Apps & Imports' => ['integrations.install', 'imports.execute'],
+                    'Enterprise SSO' => ['sso.manage'],
+                ],
+            ],
+            'dashboards' => [
+                'name' => 'Dashboards & Analytics',
+                'icon' => 'LayoutGrid',
+                'subjects' => [
+                    'Executive Dashboards & Reports' => ['dashboards.manage'],
+                ],
+            ],
+        ];
+
+        $modules = [];
+        $permissionMap = $allPermissions->keyBy('name');
+
+        foreach ($hierarchyDefinitions as $modKey => $modDef) {
+            $subjects = [];
+            $modPermissionsCount = 0;
+
+            foreach ($modDef['subjects'] as $subjectName => $permNames) {
+                $subjectPerms = [];
+                foreach ($permNames as $pName) {
+                    if (isset($permissionMap[$pName])) {
+                        $p = $permissionMap[$pName];
+                        $subjectPerms[] = [
+                            'id' => $p->id,
+                            'name' => $p->name,
+                            'description' => $p->description,
+                            'label' => ucwords(str_replace(['.', '_'], ' ', $p->name)),
+                        ];
+                        $modPermissionsCount++;
+                    }
+                }
+                if (!empty($subjectPerms)) {
+                    $subjects[] = [
+                        'name' => $subjectName,
+                        'permissions' => $subjectPerms,
+                    ];
+                }
+            }
+
+            if (!empty($subjects)) {
+                $modules[] = [
+                    'key' => $modKey,
+                    'name' => $modDef['name'],
+                    'icon' => $modDef['icon'],
+                    'subjects_count' => count($subjects),
+                    'permissions_count' => $modPermissionsCount,
+                    'subjects' => $subjects,
+                ];
+            }
+        }
+
         return response()->json([
             'data' => $permissions,
+            'total_count' => $allPermissions->count(),
+            'modules' => $modules,
         ]);
     }
 

@@ -12,6 +12,7 @@ import {
   DollarSign,
   Send,
   X,
+  Minus,
 } from 'lucide-react';
 import { resourcesApi } from '../../api/resources';
 import { useProjectStore } from '../../stores/useProjectStore';
@@ -34,6 +35,7 @@ export const FloatingTimerWidget: React.FC = () => {
   const { projects } = useProjectStore();
 
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [seconds, setSeconds] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -329,33 +331,61 @@ export const FloatingTimerWidget: React.FC = () => {
             Log {calculatedHours.toFixed(2)}h to Task
           </ClayButton>
         </div>
+      ) : isMinimized ? (
+        /* Minimized Round Floating Button */
+        <button
+          onClick={() => setIsMinimized(false)}
+          className="w-11 h-11 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition-all transform hover:scale-110 cursor-pointer ring-2 ring-emerald-400/50"
+          title={`Restore Timer (${formatTime(seconds)})`}
+        >
+          <Clock className={`w-5 h-5 ${isRunning ? 'animate-spin' : ''}`} />
+        </button>
       ) : (
         /* Collapsed Floating Pill */
-        <button
-          onClick={() => setIsExpanded(true)}
-          className={`flex items-center gap-3 px-4 py-2.5 rounded-full backdrop-blur-2xl border shadow-xl transition-all transform hover:scale-105 ${
-            isRunning
-              ? 'bg-emerald-600/90 text-white border-emerald-400/40 shadow-emerald-500/20 ring-2 ring-emerald-500/30'
-              : 'bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-100 border-slate-200/80 dark:border-slate-800'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-white animate-ping' : 'bg-emerald-500'}`} />
-            <Clock className="w-4 h-4" />
-          </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setIsExpanded(true)}
+            className={`flex items-center gap-3 px-4 py-2.5 rounded-full backdrop-blur-2xl border shadow-xl transition-all transform hover:scale-105 cursor-pointer ${
+              isRunning
+                ? 'bg-emerald-600/90 text-white border-emerald-400/40 shadow-emerald-500/20 ring-2 ring-emerald-500/30'
+                : 'bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-100 border-slate-200/80 dark:border-slate-800'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-white animate-ping' : 'bg-emerald-500'}`} />
+              <Clock className="w-4 h-4" />
+            </div>
 
-          <span className="font-mono text-xs font-black tracking-wider">
-            {formatTime(seconds)}
-          </span>
-
-          {selectedTask && (
-            <span className="text-[11px] font-semibold opacity-90 max-w-[120px] truncate border-l border-current/20 pl-2">
-              {selectedTask.name}
+            <span className="font-mono text-xs font-black tracking-wider">
+              {formatTime(seconds)}
             </span>
-          )}
 
-          <ChevronUp className="w-3.5 h-3.5 opacity-60" />
-        </button>
+            {selectedTask ? (
+              <span className="text-[11px] font-semibold opacity-90 max-w-[130px] truncate border-l border-current/20 pl-2">
+                {selectedTask.name}
+              </span>
+            ) : (
+              <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 border-l border-current/20 pl-2">
+                Select Task to Track
+              </span>
+            )}
+
+            <ChevronUp className="w-3.5 h-3.5 opacity-60" />
+          </button>
+
+          {/* Minimize Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMinimized(true);
+            }}
+            className="w-7 h-7 rounded-full bg-white/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 shadow-sm flex items-center justify-center transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+            title="Minimize Timer"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );

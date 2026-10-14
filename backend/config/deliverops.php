@@ -113,5 +113,15 @@ return [
                 ['type' => 'send_notification', 'params' => ['recipient' => 'pm', 'title' => 'Capacity Exceeded', 'body' => 'Logged hours exceed weekly capacity for {{user.name}}']],
             ],
         ],
+        [
+            'id' => 'tpl_critical_path_delay_alert',
+            'name' => 'Critical Path Delay Alert',
+            'description' => 'When a critical path task slips, notify delivery leads immediately and trigger schedule recalculation',
+            'trigger' => ['event' => 'task.schedule_slipped'],
+            'conditions' => ['all' => [['field' => 'is_critical', 'operator' => 'equals', 'value' => true]]],
+            'actions' => [
+                ['type' => 'send_notification', 'params' => ['recipient' => 'lead', 'title' => 'Critical Path Delay', 'body' => '{{task.name}} is delayed on the critical path']],
+            ],
+        ],
     ],
 ];

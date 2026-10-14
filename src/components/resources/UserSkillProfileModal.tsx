@@ -156,13 +156,21 @@ export const UserSkillProfileModal: React.FC<UserSkillProfileModalProps> = ({
             <select
               value={selectedSkillId}
               onChange={(e) => setSelectedSkillId(e.target.value)}
-              className="col-span-1 sm:col-span-3 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-white font-medium"
+              disabled={availableSkills.length === 0}
+              className="col-span-1 sm:col-span-3 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-white font-medium min-h-[42px] disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {availableSkills.map((sk) => (
-                <option key={sk.id} value={sk.id} disabled={!sk.is_active}>
-                  {sk.name} ({sk.category}) {!sk.is_active ? '— [Retired]' : ''}
-                </option>
-              ))}
+              {availableSkills.length === 0 ? (
+                <option value="">No competencies available in catalog</option>
+              ) : (
+                <>
+                  <option value="">Select a competency to verify...</option>
+                  {availableSkills.map((sk) => (
+                    <option key={sk.id} value={sk.id} disabled={!sk.is_active}>
+                      {sk.name} ({sk.category}) {!sk.is_active ? '— [Retired]' : ''}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
 
             <div>
@@ -197,7 +205,8 @@ export const UserSkillProfileModal: React.FC<UserSkillProfileModalProps> = ({
               <button
                 type="button"
                 onClick={handleAddSkill}
-                className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition-all"
+                disabled={!selectedSkillId || availableSkills.length === 0}
+                className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition-all"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add Skill

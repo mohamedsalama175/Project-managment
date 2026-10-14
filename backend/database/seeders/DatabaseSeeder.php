@@ -17,6 +17,9 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,
             SystemProjectTemplatesSeeder::class,
             WidgetCatalogSeeder::class,
+            UserSeeder::class,
         ]);
+
+        // DemoDataSeeder omitted to ensure only the single seeded Super Admin (admin@admin.com) exists.
     }
 }

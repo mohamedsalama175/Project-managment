@@ -3,7 +3,7 @@
  * Interfaces with Laravel 12 /api/v1/ endpoints
  */
 
-import { apiClient, PaginatedResponse } from './client';
+import { apiClient, API_BASE_URL, PaginatedResponse } from './client';
 
 export interface ApiKey {
   id: string;
@@ -243,8 +243,6 @@ export const integrationsApi = {
       formData.append('project_id', params.project_id);
       formData.append('provider', params.provider);
       formData.append('file', params.file);
-
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
       const authToken = localStorage.getItem('deliverops_auth_token');
       const activeOrgId = localStorage.getItem('deliverops_current_org_id');
 

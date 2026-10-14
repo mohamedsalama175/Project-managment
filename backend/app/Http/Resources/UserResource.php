@@ -15,7 +15,7 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             'phone' => $this->phone,
-            'avatarUrl' => $this->avatar_path ? Storage::disk('public')->url($this->avatar_path) : null,
+            'avatarUrl' => $this->avatar_path ? (str_starts_with($this->avatar_path, 'data:') || str_starts_with($this->avatar_path, 'http') || str_starts_with($this->avatar_path, '/') ? $this->avatar_path : Storage::disk('public')->url($this->avatar_path)) : null,
             'jobTitle' => $this->job_title,
             'department' => $this->department,
             'skills' => $this->skills ?? [],

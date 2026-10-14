@@ -36,6 +36,7 @@ import {
   INITIAL_TEAM_MEMBERS,
   migrateLegacyProjectData,
 } from '../utils/migrationUtils';
+import { useAuthStore } from './useAuthStore';
 
 /** Silently syncs a project to IndexedDB — errors are non-fatal. */
 function syncToDB(project: Project): void {
@@ -93,7 +94,7 @@ const DEFAULT_CATEGORIES_ERP = [
   { id: 'cat-qa', name: 'QA & Security', color: '#10b981' },
 ];
 
-const DEMO_PROJECTS: Project[] = [
+export const DEMO_PROJECTS: Project[] = [
   {
     id: 'proj-mafi-01',
     name: 'MAFI Scale Logistics & Automation',
@@ -147,11 +148,11 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'Urgent',
         assignee: 'Ahmed Khalil',
         primaryOwnerId: 'member-ahmed-khalil',
-        primaryOwnerHours: 24,
+        primaryOwnerHours: 16,
         contributorAllocations: [],
         reviewerId: 'member-director-admin',
         reviewStatus: 'none',
-        estimatedHours: 24,
+        estimatedHours: 16,
         loggedHours: 12,
         start: '2026-10-04',
         end: '2026-10-15',
@@ -172,13 +173,13 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'High',
         assignee: 'Tariq Mansoor',
         primaryOwnerId: 'member-tariq-mansoor',
-        primaryOwnerHours: 18,
+        primaryOwnerHours: 16,
         contributorAllocations: [
-          { memberId: 'member-ahmed-khalil', allocatedHours: 6 },
+          { memberId: 'member-ahmed-khalil', allocatedHours: 4 },
         ],
         reviewerId: 'member-ahmed-khalil',
         reviewStatus: 'none',
-        estimatedHours: 24,
+        estimatedHours: 20,
         loggedHours: 16,
         start: '2026-10-04',
         end: '2026-10-11',
@@ -249,11 +250,11 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'Medium',
         assignee: 'Omar Farouk',
         primaryOwnerId: 'member-omar-farouk',
-        primaryOwnerHours: 8,
+        primaryOwnerHours: 18,
         contributorAllocations: [],
         reviewerId: null,
         reviewStatus: 'none',
-        estimatedHours: 8,
+        estimatedHours: 18,
         loggedHours: 0,
         start: '2026-10-16',
         end: '2026-10-20',
@@ -274,11 +275,11 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'Medium',
         assignee: 'Omar Farouk',
         primaryOwnerId: 'member-omar-farouk',
-        primaryOwnerHours: 8,
+        primaryOwnerHours: 20,
         contributorAllocations: [],
         reviewerId: null,
         reviewStatus: 'none',
-        estimatedHours: 8,
+        estimatedHours: 20,
         loggedHours: 0,
         start: '2026-10-16',
         end: '2026-10-20',
@@ -299,11 +300,11 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'High',
         assignee: 'Tariq Mansoor',
         primaryOwnerId: 'member-tariq-mansoor',
-        primaryOwnerHours: 20,
+        primaryOwnerHours: 11,
         contributorAllocations: [],
         reviewerId: null,
         reviewStatus: 'none',
-        estimatedHours: 20,
+        estimatedHours: 11,
         loggedHours: 0,
         start: '2026-10-19',
         end: '2026-10-25',
@@ -349,11 +350,11 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'Urgent',
         assignee: 'Ahmed Khalil',
         primaryOwnerId: 'member-ahmed-khalil',
-        primaryOwnerHours: 16,
+        primaryOwnerHours: 8,
         contributorAllocations: [],
         reviewerId: 'member-director-admin',
         reviewStatus: 'none',
-        estimatedHours: 16,
+        estimatedHours: 8,
         loggedHours: 0,
         start: '2026-10-26',
         end: '2026-11-01',
@@ -399,11 +400,11 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'Urgent',
         assignee: 'Executive Team',
         primaryOwnerId: 'member-director-admin',
-        primaryOwnerHours: 0,
+        primaryOwnerHours: 20,
         contributorAllocations: [],
         reviewerId: null,
         reviewStatus: 'none',
-        estimatedHours: 0,
+        estimatedHours: 20,
         loggedHours: 0,
         start: '2026-11-05',
         end: '2026-11-05',
@@ -448,12 +449,12 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'Urgent',
         assignee: 'Tariq Mansoor',
         primaryOwnerId: 'member-tariq-mansoor',
-        primaryOwnerHours: 32,
+        primaryOwnerHours: 12,
         contributorAllocations: [],
         reviewerId: 'member-ahmed-khalil',
         reviewStatus: 'none',
-        estimatedHours: 32,
-        loggedHours: 28,
+        estimatedHours: 12,
+        loggedHours: 12,
         start: '2026-10-01',
         end: '2026-10-12',
         pct: 90,
@@ -471,12 +472,12 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'High',
         assignee: 'Ahmed Khalil',
         primaryOwnerId: 'member-ahmed-khalil',
-        primaryOwnerHours: 24,
+        primaryOwnerHours: 8,
         contributorAllocations: [],
         reviewerId: null,
         reviewStatus: 'none',
-        estimatedHours: 24,
-        loggedHours: 10,
+        estimatedHours: 8,
+        loggedHours: 8,
         start: '2026-10-13',
         end: '2026-10-26',
         pct: 35,
@@ -494,11 +495,11 @@ const DEMO_PROJECTS: Project[] = [
         priority: 'High',
         assignee: 'Nouran Adel',
         primaryOwnerId: 'member-nouran-adel',
-        primaryOwnerHours: 28,
+        primaryOwnerHours: 20,
         contributorAllocations: [],
         reviewerId: null,
         reviewStatus: 'none',
-        estimatedHours: 28,
+        estimatedHours: 20,
         loggedHours: 18,
         start: '2026-10-05',
         end: '2026-10-22',
@@ -524,7 +525,7 @@ export const useProjectStore = create<ProjectStore>()(
       activeView: 'planner',
 
       // Persona Context (Only active during local demo/simulation mode)
-      activePersonaId: isDemoMode ? 'member-ahmed-khalil' : '',
+      activePersonaId: '',
       activePersonaRole: 'project_manager',
       setPersona: (memberId, role) => {
         const member = get().teamMembers.find((m) => m.id === memberId);
@@ -538,11 +539,11 @@ export const useProjectStore = create<ProjectStore>()(
       // Global Team Directory
       teamMembers: INITIAL_TEAM_MEMBERS,
       addTeamMember: (memberData) => {
-        const id = `member-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        const id = memberData.id || `member-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
         const newMember: TeamMember = {
           ...memberData,
           id,
-          createdAt: new Date().toISOString(),
+          createdAt: memberData.createdAt || new Date().toISOString(),
         };
         set((state) => ({ teamMembers: [...state.teamMembers, newMember] }));
         dbSaveTeamMember(newMember).catch(() => {});
@@ -583,20 +584,78 @@ export const useProjectStore = create<ProjectStore>()(
         dbDeleteTeamMember(id).catch(() => {});
         return { success: true };
       },
+      syncTeamMembersFromBackend: (apiUsers) => {
+        if (!Array.isArray(apiUsers) || apiUsers.length === 0) return;
+        set((state) => {
+          const current = [...state.teamMembers];
+          apiUsers.forEach((u: any) => {
+            const mappedRole = (u.roles?.[0] as UserRole) || (u.primaryRole as UserRole) || 'contributor';
+            const existingIndex = current.findIndex(
+              (m) =>
+                String(m.id) === String(u.id) ||
+                (u.email && m.email && m.email.toLowerCase().trim() === u.email.toLowerCase().trim())
+            );
+            const avatar = u.avatarUrl || u.avatar_path || undefined;
+            const jobTitle = u.jobTitle || u.job_title || 'Team Member';
+            const capacity = u.weeklyCapacityHours ?? u.weekly_capacity_hours ?? 40;
+            const department = u.department || 'General';
+            const status = u.status || (u.is_active === false ? 'inactive' : 'active');
+
+            if (existingIndex >= 0) {
+              current[existingIndex] = {
+                ...current[existingIndex],
+                id: String(u.id),
+                name: u.name,
+                email: u.email,
+                phone: u.phone || current[existingIndex].phone,
+                jobTitle,
+                department,
+                skills: u.skills && u.skills.length > 0 ? u.skills : current[existingIndex].skills,
+                systemRole: mappedRole,
+                weeklyCapacityHours: capacity,
+                status,
+                color: u.color || current[existingIndex].color || '#10b981',
+                photoUrl: avatar || current[existingIndex].photoUrl,
+                avatar: avatar || current[existingIndex].avatar,
+              };
+            } else {
+              current.push({
+                id: String(u.id),
+                name: u.name,
+                email: u.email,
+                phone: u.phone || undefined,
+                jobTitle,
+                department,
+                skills: u.skills || [],
+                systemRole: mappedRole,
+                weeklyCapacityHours: capacity,
+                status,
+                color: u.color || '#10b981',
+                photoUrl: avatar,
+                avatar,
+                createdAt: new Date().toISOString(),
+              });
+            }
+          });
+          dbSaveAllTeamMembers(current).catch(() => {});
+          return { teamMembers: current };
+        });
+      },
 
       // Audit Logging
       auditLogs: [],
       logAudit: async (action, fieldName, oldValue, newValue, reason = null, taskId = null, projectIdOverride) => {
         const state = get();
         const activeMember = state.teamMembers.find((m) => m.id === state.activePersonaId);
+        const fallbackName = activeMember?.name || useAuthStore.getState().user?.name || 'Mohamed Salama';
         const projectId = projectIdOverride || state.activeProjectId;
         const entry: AuditLogEntry = {
           id: `audit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
           projectId,
           taskId: taskId || null,
           timestamp: new Date().toISOString(),
-          actorId: state.activePersonaId,
-          actorName: activeMember?.name || 'Ahmed Khalil',
+          actorId: state.activePersonaId || useAuthStore.getState().user?.id || 'user',
+          actorName: fallbackName,
           actorRole: state.activePersonaRole,
           action,
           fieldName: fieldName || null,
@@ -614,11 +673,12 @@ export const useProjectStore = create<ProjectStore>()(
       addTaskComment: async (taskId, content) => {
         const state = get();
         const activeMember = state.teamMembers.find((m) => m.id === state.activePersonaId);
+        const fallbackName = activeMember?.name || useAuthStore.getState().user?.name || 'Mohamed Salama';
         const comment: TaskComment = {
           id: `comment-${Date.now().toString(36)}`,
           taskId,
-          authorId: state.activePersonaId,
-          authorName: activeMember?.name || 'Ahmed Khalil',
+          authorId: state.activePersonaId || useAuthStore.getState().user?.id || 'user',
+          authorName: fallbackName,
           authorAvatar: activeMember?.avatar,
           content: content.trim(),
           createdAt: new Date().toISOString(),

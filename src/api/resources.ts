@@ -394,6 +394,9 @@ export const resourcesApi = {
     hours: number;
     description?: string;
     billable?: boolean;
+    task_name?: string;
+    project_id?: string;
+    project_name?: string;
   }) => {
     return apiClient.request<{ data: TimeEntry }>(`/tasks/${taskId}/time-entries`, {
       method: 'POST',

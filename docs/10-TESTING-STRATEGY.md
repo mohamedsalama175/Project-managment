@@ -2,8 +2,9 @@
 
 > **Document ID:** `DOC-10-TESTING-STRATEGY`  
 > **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Test Frameworks:** PHPUnit 11 / Pest PHP v2, Playwright 1.42+, PHPStan Level 8, Mockery
+> **Version:** 2.2.0  
+> **Test Frameworks:** PHPUnit 11 / Pest PHP v2, Playwright 1.42+, PHPStan Level 8, Mockery  
+> **Harmonized With:** [01-BUSINESS](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/01-BUSINESS-AND-DOMAIN.md), [05-BACKEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/05-BACKEND-ARCHITECTURE.md), [06-API](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/06-API-REFERENCE.md), [07-FRONTEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/07-FRONTEND-ARCHITECTURE.md), [08-DEPLOYMENT](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/08-DEPLOYMENT-AND-OPERATIONS.md), [09-SECURITY](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/09-SECURITY-AND-COMPLIANCE.md)
 
 ---
 
@@ -18,11 +19,13 @@ graph TD
     end
 
     subgraph Integration ["Feature & Integration Suite (PHPUnit / Pest) ~ 30%"]
-        API_Tests["47 REST API Endpoints & Form Requests"]
-        Auth_Tests["Spatie RBAC & Privilege Escalation Guards"]
+        API_Tests["100+ REST API Endpoints across 20 Modules"]
+        Tenant_Tests["Multi-Tenancy Isolation & Organization Scoping"]
+        Auth_Tests["Spatie Teams RBAC & Privilege Escalation Guards"]
         Anti_Self["Anti-Self-Approval Review Enforcement"]
         Locking_Tests["Optimistic Concurrency & Version Collision (409)"]
         Blocker_Tests["Multi-Risk Blocker Unblocking State Transitions"]
+        Audit_Tests["Cryptographic SHA-256 Hash Chaining Integrity"]
     end
 
     subgraph Unit ["Mathematical & Unit Suite (Pest / Fast PHP) ~ 60%"]

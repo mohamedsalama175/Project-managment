@@ -13,6 +13,23 @@ class StoreUserRequest extends FormRequest
         return $this->user()->can('create', User::class);
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        if ($this->has('jobTitle') && !$this->has('job_title')) {
+            $merge['job_title'] = $this->input('jobTitle');
+        }
+        if ($this->has('weeklyCapacityHours') && !$this->has('weekly_capacity_hours')) {
+            $merge['weekly_capacity_hours'] = $this->input('weeklyCapacityHours');
+        }
+        if ($this->has('avatarUrl') && !$this->has('avatar_path')) {
+            $merge['avatar_path'] = $this->input('avatarUrl');
+        }
+        if (!empty($merge)) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         return [
@@ -34,6 +51,7 @@ class StoreUserRequest extends FormRequest
             'color' => ['nullable', 'string', 'regex:/^#([a-fA-F0-9]{6})$/'],
             'roles' => ['required', 'array', 'min:1'],
             'roles.*' => ['string', Rule::exists('roles', 'name')->where('guard_name', 'web')],
+            'avatar_path' => ['nullable', 'string'],
             'avatar' => ['nullable', 'image', 'max:5120'],
         ];
     }

@@ -3,8 +3,8 @@ export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 export type ReviewStatus = 'none' | 'pending_review' | 'approved' | 'changes_requested';
 export type DurationMode = 'calendar' | 'working_days';
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ActiveView = 'planner' | 'config' | 'dashboard' | 'team' | 'financials' | 'integrations' | 'automation' | 'compliance' | 'status';
-export type UserRole = 'admin' | 'project_manager' | 'contributor' | 'viewer';
+export type ActiveView = 'planner' | 'config' | 'dashboard' | 'team' | 'financials' | 'users' | 'roles' | 'create-role';
+export type UserRole = 'admin' | 'project_manager' | 'contributor' | 'viewer' | 'field_engineer';
 export type MemberAvailabilityStatus = 'active' | 'on_leave' | 'inactive';
 
 // Effort Allocation for Multiple Contributors (Option C)
@@ -34,6 +34,8 @@ export interface Task {
   // Preserved Legacy Assignee & Resolution
   assignee?: string;               // Legacy string preserved exactly as imported
   assigneeUnresolved?: boolean;    // True if legacy string could not be verified
+  assignedTo?: string | number;
+  assigned_to?: string | number;
 
   // Enhanced Ownership & Accountability
   primaryOwnerId: string | null;   // Single accountable owner; null if unassigned
@@ -75,6 +77,7 @@ export interface ProjectRisk {
   projectId: string;
   linkedTaskIds: string[];
   linkedMilestoneIds: string[];
+  code?: string;
   title: string;
   description: string;
   type: RIBType;
@@ -187,9 +190,10 @@ export interface ProjectStore {
 
   // Global Team Directory
   teamMembers: TeamMember[];
-  addTeamMember: (member: Omit<TeamMember, 'id' | 'createdAt'>) => string;
+  addTeamMember: (member: Omit<TeamMember, 'id' | 'createdAt'> & { id?: string; createdAt?: string }) => string;
   updateTeamMember: (id: string, updates: Partial<TeamMember>) => void;
   deleteTeamMember: (id: string) => { success: boolean; reason?: string };
+  syncTeamMembersFromBackend: (users: Array<Record<string, any>>) => void;
 
   // Audit Logs
   auditLogs: AuditLogEntry[];

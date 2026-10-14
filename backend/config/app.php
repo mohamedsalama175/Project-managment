@@ -132,4 +132,11 @@ return [
     'initial_admin_email' => env('INITIAL_ADMIN_EMAIL', 'admin@deliverops.com'),
     'initial_admin_password' => env('INITIAL_ADMIN_PASSWORD', 'AdminPassword2026!'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Regional Deployment Cluster Identifier
+    |--------------------------------------------------------------------------
+    */
+    'region' => env('APP_REGION', 'EMEA'),
+
 ];

@@ -2,8 +2,9 @@
 
 > **Document ID:** `DOC-11-REPORTING-AND-ANALYTICS`  
 > **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Target Framework:** Earned Value Management (EVM), CPM Drift Analytics, Multi-Format Exporters
+> **Version:** 2.2.0  
+> **Target Framework:** Earned Value Management (EVM), CPM Drift Analytics, Multi-Format Exporters  
+> **Harmonized With:** [01-BUSINESS](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/01-BUSINESS-AND-DOMAIN.md), [02-FEATURES](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/02-FEATURES-AND-PAGES.md), [03-CRUD](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/03-CRUD-SPECIFICATIONS.md), [05-BACKEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/05-BACKEND-ARCHITECTURE.md), [06-API](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/06-API-REFERENCE.md), [07-FRONTEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/07-FRONTEND-ARCHITECTURE.md)
 
 ---
 

@@ -21,33 +21,38 @@ export const AvatarStack: React.FC<AvatarStackProps> = ({
   showNameFallback = true,
 }) => {
   const dim = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-7 h-7 text-xs';
-  const borderDim = size === 'sm' ? 'ring-2' : 'ring-2';
+  const borderDim = 'ring-1 ring-white/60 dark:ring-slate-900';
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
-  // If no primary owner and no contributors, check legacy assignee
+  // If no primary owner and no contributors, render an avatar circle with initials for legacy assignee
   if (!primaryOwner && contributors.length === 0) {
-    if (legacyAssignee && showNameFallback) {
+    if (legacyAssignee && legacyAssignee !== 'Unassigned') {
       return (
-        <span className="text-slate-400 dark:text-slate-500 italic text-[11px] truncate max-w-[120px]" title={`Legacy assignee: ${legacyAssignee}`}>
-          {legacyAssignee}
-        </span>
+        <div
+          className={`rounded-full ${dim} aspect-square overflow-hidden flex items-center justify-center font-bold font-mono select-none ring-white dark:ring-[#161d24] ${borderDim} shadow-sm shrink-0 bg-emerald-700 text-white`}
+          title={`Assigned: ${legacyAssignee}`}
+        >
+          <span>{getInitials(legacyAssignee)}</span>
+        </div>
       );
     }
     return (
-      <span className="text-slate-400 dark:text-slate-500 text-[11px] italic">
-        Unassigned
-      </span>
+      <div
+        className={`rounded-full ${dim} aspect-square border border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 text-[10px] select-none shrink-0`}
+        title="Unassigned"
+      >
+        —
+      </div>
     );
   }
 
   const allMembers = primaryOwner ? [primaryOwner, ...contributors] : contributors;
   const visible = allMembers.slice(0, maxVisible);
   const remainingCount = allMembers.length - maxVisible;
-
-  const getInitials = (name: string) => {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  };
 
   const getTooltip = () => {
     const lines: string[] = [];
@@ -72,7 +77,7 @@ export const AvatarStack: React.FC<AvatarStackProps> = ({
         return (
           <div
             key={m.id}
-            className={`relative rounded-full ${dim} flex items-center justify-center font-bold font-mono select-none ring-white dark:ring-[#161d24] ${borderDim} shadow-sm shrink-0 transition-transform hover:scale-110 hover:z-20`}
+            className={`relative rounded-full ${dim} aspect-square overflow-hidden flex items-center justify-center font-bold font-mono select-none ring-white dark:ring-[#161d24] ${borderDim} shadow-sm shrink-0 transition-transform hover:scale-110 hover:z-20`}
             style={{
               backgroundColor: m.color || '#1f8a70',
               color: '#ffffff',
@@ -83,7 +88,7 @@ export const AvatarStack: React.FC<AvatarStackProps> = ({
               <img
                 src={m.photoUrl || m.avatar}
                 alt={m.name}
-                className="w-full h-full rounded-full object-cover"
+                className="w-full h-full object-cover object-center"
               />
             ) : (
               <span>{getInitials(m.name)}</span>

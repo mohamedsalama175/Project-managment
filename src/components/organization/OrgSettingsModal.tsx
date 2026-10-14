@@ -59,7 +59,7 @@ export const OrgSettingsModal: React.FC<OrgSettingsModalProps> = ({
   const [invitations, setInvitations] = useState<ApiOrganizationInvitation[]>([]);
   const [isLoadingInvites, setIsLoadingInvites] = useState(false);
   const [bulkEmails, setBulkEmails] = useState('');
-  const [inviteRole, setInviteRole] = useState<'member' | 'billing' | 'admin' | 'owner'>('member');
+  const [inviteRole, setInviteRole] = useState<'member' | 'billing' | 'admin' | 'owner' | 'field_engineer'>('member');
   const [isSendingInvites, setIsSendingInvites] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
@@ -670,10 +670,16 @@ export const OrgSettingsModal: React.FC<OrgSettingsModalProps> = ({
                     >
                       <option value="member">Member (Contributor)</option>
                       <option value="billing">Billing (Viewer)</option>
+                      <option value="field_engineer">Field Engineer (Tasks Only)</option>
                       <option value="admin">Admin (Manager)</option>
                       <option value="owner">Co-Owner</option>
                     </select>
                   </div>
+                  {inviteRole === 'field_engineer' && (
+                    <p className="w-full text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                      Restricted to assigned tasks only. Cannot create projects, view financials, or access admin settings.
+                    </p>
+                  )}
 
                   <ClayButton
                     type="submit"

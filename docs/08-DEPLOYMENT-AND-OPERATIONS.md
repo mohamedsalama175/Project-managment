@@ -2,8 +2,9 @@
 
 > **Document ID:** `DOC-08-DEPLOYMENT-AND-OPERATIONS`  
 > **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Target Environment:** Docker, Kubernetes / Linux VMs (Ubuntu 22.04 LTS), GitHub Actions CI/CD, MySQL 8.0, Redis 7
+> **Version:** 2.2.0  
+> **Target Environment:** Docker, Kubernetes / Linux VMs (Ubuntu 22.04 LTS), GitHub Actions CI/CD, MySQL 8.0, Redis 7  
+> **Harmonized With:** [01-BUSINESS](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/01-BUSINESS-AND-DOMAIN.md), [05-BACKEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/05-BACKEND-ARCHITECTURE.md), [06-API](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/06-API-REFERENCE.md), [07-FRONTEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/07-FRONTEND-ARCHITECTURE.md), [09-SECURITY](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/09-SECURITY-AND-COMPLIANCE.md), [16-RUNBOOKS](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/16-RUNBOOKS.md)
 
 ---
 
@@ -242,6 +243,54 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 EXPOSE 9000
 CMD ["php-fpm"]
 ```
+
+---
+
+### 1.3 First-Run Installation & Migration Provisioning
+
+DeliverOps provides an automated two-path installation workflow for initializing bare-metal, VM, or containerized deployments:
+
+#### Option A: Headless CLI Orchestration (`deliverops:install`)
+For CI/CD automated deployments, Infrastructure as Code, or container entrypoints:
+
+```bash
+# 1. Ensure Spatie Teams multi-tenancy configuration is active
+php artisan deliverops:prepare-spatie-teams
+
+# 2. Run automated installer: applies all 51 migrations, seeds RBAC & templates, creates admin & tenant
+php artisan deliverops:install --force
+```
+
+**What `deliverops:install` accomplishes automatically:**
+1. **Validates Spatie Teams Prerequisite**: Confirms `config('permission.teams') === true`.
+2. **Runs 51 Database Migrations**: Executes all schema migrations in strict chronological order with foreign keys and index constraints.
+3. **Idempotency Guard**: Checks `InstallState::isInstalled()` singleton to prevent re-initializing active systems.
+4. **Executes `InstallationOrchestrator`**:
+   - Provisions the primary tenant (`organizations` table with ULID).
+   - Provisions default roles and 55+ permissions across all 20 modules.
+   - Generates the root SuperAdmin user with strict password validation.
+   - Binds the SuperAdmin to the tenant using Spatie Teams (`team_id = organization.id`).
+   - Seeds standard project templates, WBS phase structures, and risk categories.
+   - Writes the immutable `install_state` record marking the system as operational.
+
+#### Option B: Web-Based Setup Wizard (`/install`)
+For manual deployments, DeliverOps renders a high-density, step-by-step installer at `/install` (Visual Reference: [33_first_run_install_view.png](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/33_first_run_install_view.png)):
+- **Step 1: System Pre-Flight**: Verifies PHP 8.2+, extensions (`bcmath`, `intl`, `pdo_mysql`, `redis`), directory permissions (`storage/`, `bootstrap/cache/`), and database connectivity.
+- **Step 2: Database Migration**: Applies 51 schema migrations with real-time SSE progress reporting.
+- **Step 3: Root Organization & SuperAdmin**: Prompts for organization name, slug, administrator email, and password.
+- **Step 4: Activation**: Locks the install gateway and transitions directly to the login portal.
+
+---
+
+### 1.4 Operations & Troubleshooting CLI Commands
+
+| Command | Purpose | Parameters / Options |
+| :--- | :--- | :--- |
+| `php artisan deliverops:install` | Complete automated platform provisioning | `--force`: Bypass production warning prompt |
+| `php artisan deliverops:prepare-spatie-teams` | Configures and validates Spatie Teams config | Automatically verifies `team_id` / `organization_id` alignment |
+| `php artisan deliverops:unlock-user {email}` | Unlocks an account locked due to failed login attempts | `{email}`: Target user's registered email |
+| `php artisan queue:work redis` | Processes asynchronous background queue jobs | `--sleep=3`, `--tries=3`, `--timeout=60` |
+| `php artisan schedule:run` | Triggers scheduled maintenance, reminders & auto-schedulers | Recommended cron execution frequency: every 1 minute |
 
 ---
 

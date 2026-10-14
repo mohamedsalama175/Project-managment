@@ -24,6 +24,13 @@ class ProjectController extends Controller
 
         $projects = $this->projectService->listProjects($request->user(), $request->all());
 
+        foreach ($projects as $project) {
+            $completedCount = $project->tasks()->where('status', 'Completed')->count();
+            if (($project->progress_pct ?? 0) > 0 && $completedCount === 0) {
+                \Illuminate\Support\Facades\Log::warning("Project {$project->id} ({$project->code}) has progress > 0% ({$project->progress_pct}%) but 0 completed tasks.");
+            }
+        }
+
         return ProjectResource::collection($projects)->response();
     }
 

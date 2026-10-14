@@ -1,58 +1,90 @@
-# 04. User Flows & Real-World Scenarios
+# 04. User Flows, Execution Scenarios & Enterprise Journeys
 
 > **Document ID:** `DOC-04-USER-FLOWS-AND-SCENARIOS`  
 > **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Harmonized With:** 01-BUSINESS, 02-FEATURES, 03-CRUD, 05-BACKEND, 06-API, 09-SECURITY, 10-TESTING
+> **Version:** 2.2.0  
+> **Harmonized With:** [01-BUSINESS](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/01-BUSINESS-AND-DOMAIN.md), [02-FEATURES](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/02-FEATURES-AND-PAGES.md), [03-CRUD](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/03-CRUD-SPECIFICATIONS.md), [05-BACKEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/05-BACKEND-ARCHITECTURE.md), [06-API](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/06-API-REFERENCE.md), [07-FRONTEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/07-FRONTEND-ARCHITECTURE.md), [09-SECURITY](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/09-SECURITY-AND-COMPLIANCE.md), [10-TESTING](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/10-TESTING-STRATEGY.md)
 
 ---
 
-## 1. Scenario 1: Initial Project Provisioning & WBS Decomposition
+## 1. Scenario 1: Tenant Onboarding & First-Run Provisioning
 
 ```
-[User: PM]
+[System Install Wizard: First-Run]
    │
-   ├─► 1. Clicks "New Project" in Top Navbar
-   │   └─► Fills: Name, Code Prefix, PM, Calendar (MENA or Western)
+   ├─► 1. Accesses /install or calls deliverops:install CLI
+   │   └─► Checks DB migrations (51), storage symlinks, Redis queue, app key
    │
-   ├─► 2. System Provisions Project
-   │   └─► Generates ULID, sets default config, assigns Project Manager
+   ├─► 2. Creates Initial SuperAdmin & Root Organization
+   │   └─► Sets: Org Name, Slug, SuperAdmin Email, Secure Password (zxcvbn >= 3)
    │
-   ├─► 3. Decomposes Deliverables in WBS Hierarchical Table
-   │   ├─► Adds Phase 1: "Hardware Commissioning" (Summary Node)
-   │   ├─► Adds Leaf 1.1: "Mount Scale Platforms" (Duration: 3d)
-   │   └─► Adds Leaf 1.2: "Wire Terminal Boxes" (Duration: 2d)
+   ├─► 3. Issues Scoped Auth Token (Sanctum + Tenant Context)
+   │   └─► Header X-Organization-Id bound to session & localStorage
    │
-   └─► 4. Effort-Weighted Rollup
-       └─► System computes parent progress dynamically based on child allocations
+   └─► 4. Directs to Main Dashboard / CLAYGANTT Matrix View
 ```
 
 ### Step-by-Step Flow:
-1. **Trigger**: Delivery Lead needs to initialize a new industrial automation deployment.
+1. **Trigger**: An enterprise DevOps engineer deploys a new instance of DeliverOps.
 2. **Action**:
-   - Clicks **"+ New Project"** in the top navigation bar.
-   - Sets Name: `Factory Scale Modernization`, Code: `FSM-2026`.
-   - Selects Weekend Calendar: `Friday & Saturday` (MENA schedule).
-   - Selects Duration Mode: `working_days`.
+   - Navigates to `/install` (Visual Reference: [33_first_run_install_view.png](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/33_first_run_install_view.png)) or executes `php artisan deliverops:install`.
+   - The installer verifies database connectivity, applies all 51 migrations, seeds baseline Spatie roles/permissions, and prompts for organization creation.
+   - Enters Organization: `Acme Industrial Systems`, Slug: `acme-systems`.
+   - Enters Admin User: `admin@acme.com`, Password: `SuperSecretPassword!2026`.
 3. **Execution**:
-   - The frontend calls `POST /api/v1/projects`.
-   - The backend validates project code uniqueness, provisions `projects` row, assigns the user as `project_manager`, and records a `project_created` audit log.
-4. **WBS Authoring**:
-   - The PM adds top-level summary phases and nests granular engineering tasks using the indent/outdent controls or setting `parent_id`.
-   - The system validates that parent tasks belong to the same project and rejects circular ancestor assignments.
+   - Provisions `organizations` record with ULID primary key and `plan = 'enterprise'`.
+   - Provisions `users` record, assigns `super_admin` role via Spatie Teams scoped to `organization_id`.
+   - Authenticates user and redirects to the **CLAYGANTT Primary App Navbar**.
 
 ---
 
-## 2. Scenario 2: Critical Path Calculation & Dependency Sequencing
+## 2. Scenario 2: Project Provisioning & High-Density WBS Decomposition
+
+```
+[User: Delivery Lead]
+   │
+   ├─► 1. Presses Cmd+N or Clicks "+ New Project" in Primary App Navbar
+   │   └─► Specifies: Name, Code Prefix, PM, Calendar (MENA or Western), Budget
+   │
+   ├─► 2. Backend Provisions Project Record (App\Modules\Projects)
+   │   └─► Generates ULID, sets tree_version = 1, binds to organization_id
+   │
+   ├─► 3. WBS Matrix Authoring (46/54 Split-Pane)
+   │   ├─► Phase 1: "Hardware Commissioning" (Summary Node)
+   │   ├─► Task 1.1: "Mount Scale Platforms" (Duration: 3d, Primary Owner: Tariq)
+   │   └─► Task 1.2: "Wire Terminal Boxes" (Duration: 2d, Primary Owner: Sarah)
+   │
+   └─► 4. Live Schedule & Rollup Calculation
+       └─► System calculates parent duration and progress dynamically
+```
+
+### Step-by-Step Flow:
+1. **Trigger**: Delivery Lead initializes a multi-discipline industrial project.
+2. **Action**:
+   - Presses `Cmd+N` or clicks the quick-action button in the unified secondary utility bar.
+   - Sets Name: `Factory Scale Modernization`, Code: `FSM-2026`.
+   - Selects Weekend Calendar: `Friday & Saturday` (MENA working calendar).
+   - Selects Duration Mode: `working_days`.
+3. **Execution**:
+   - Frontend issues `POST /api/v1/projects` with `X-Organization-Id`.
+   - The backend validates project code uniqueness within tenant, provisions `projects` row, assigns PM, and logs a hash-chained `project.created` audit record.
+4. **WBS Authoring**:
+   - In the left pane WBS table (strict 40px row height), user adds summary phases and child deliverables.
+   - Indents and outdents rows using keyboard or action icons.
+   - Changes are auto-persisted via `PUT /api/v1/projects/{p}/tasks/{t}` with optimistic concurrency checks (`tree_version`).
+
+---
+
+## 3. Scenario 3: Mathematical Critical Path & Cycle Detection
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        CPM SCHEDULING FLOWCHART                        │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
-│   Task A (3 days)          Task B (5 days)          Task C (2 days)    │
-│   [ES=Oct 12, EF=Oct 14] ──► [ES=Oct 15, EF=Oct 21] ──► [Milestone]    │
-│   Float = 0 (CRITICAL)     Float = 0 (CRITICAL)     Float = 0          │
+│   Task A (3 days)          Task B (5 days)          Task C (Milestone) │
+│   [ES=Oct 12, EF=Oct 14] ──► [ES=Oct 15, EF=Oct 21] ──► [Float = 0]    │
+│   Float = 0 (CRITICAL)     Float = 0 (CRITICAL)                        │
 │                                                                        │
 │   Task D (2 days)                                                      │
 │   [ES=Oct 12, EF=Oct 13] ───────────────────────────► Task B           │
@@ -62,135 +94,133 @@
 ```
 
 ### Step-by-Step Flow:
-1. **Trigger**: Tasks have been created, but their execution sequence and timeline need to be determined mathematically.
+1. **Trigger**: User sequences tasks and defines delivery dependencies.
 2. **Action**:
-   - PM opens the **Task Details Drawer** for Task B.
-   - In the **Dependencies Section**, adds Task A as a Finish-to-Start ($FS$) predecessor.
-3. **Cycle Prevention Test**:
-   - If the user attempts to add Task B as a predecessor of Task A (forming $A \to B \to A$), DeliverOps runs Kahn's algorithm in `CpmSchedulingService.php`.
-   - Cycle is detected $\to$ Request is rejected with `422 Unprocessable Content` and error code `CPM_CYCLE_DETECTED`.
-4. **Schedule Execution**:
-   - DeliverOps runs the **Forward Pass**:
-     - Early Start ($ES$) of Task B is automatically pushed to the next working day after Task A completes (skipping weekends and holidays).
-   - DeliverOps runs the **Backward Pass**:
-     - Late Finish ($LF$) and Late Start ($LS$) are calculated using `prevWorkingDay(..., strictlyBefore: true)`.
-   - Total Float ($TF = LS - ES$) is calculated:
-     - Tasks with $TF \le 0$ are marked critical.
-     - On the Gantt canvas, critical tasks turn glowing crimson (`#EF4444`).
+   - Opens the **Task Details Drawer** for Task B.
+   - Adds Task A as a Finish-to-Start ($FS$) predecessor with 0 lag days.
+3. **Cycle Detection Check**:
+   - If the user attempts to add Task B as a predecessor of Task A ($A \to B \to A$), `CpmSchedulingService` executes Kahn's topological sort.
+   - Cycle detected $\to$ Backend immediately rejects the mutation with `422 Unprocessable Content` and error code `CPM_CYCLE_DETECTED`.
+4. **Forward and Backward Pass Calculations**:
+   - **Forward Pass**: Successor Early Start ($ES$) is pushed to the earliest valid working day following predecessor completion.
+   - **Backward Pass**: Late Finish ($LF$) and Late Start ($LS$) are computed backwards from the target project completion date.
+   - **Total Float**: $TF = LS - ES$. Tasks with $TF \le 0$ are marked critical.
+   - On the virtualized Gantt canvas, critical tasks highlight in glowing crimson (`#EF4444`) with curved orthogonal dependency vectors.
 
 ---
 
-## 3. Scenario 3: Freezing Multi-Version Baselines & Tracking Drift
+## 4. Scenario 4: Freezing Multi-Version Baselines & Tracking Drift
 
 ```
-[Contract Signed] ──► Lock Baseline ──► Created: Baseline v1.0 in baseline_versions
+[Contract Signed] ──► Click "Lock Baseline" in Utilities Bar
                              │
-                             ▼ (Supplier Delay of 4 working days)
-Actual End Shifts +4d ──► Compute Variance:
+                             ├─► Creates BaselineVersion "V1.0 Contractual Target"
+                             ├─► Snapshots all current dates into task_baselines
+                             │
+                             ▼ (Supplier Delay of 4 working days occurs)
+Actual End Shifts +4d ──► Compute Drift Metrics:
                              ├─► Start Variance:    SV = start - baseline_start (0d)
                              └─► Finish Variance:   FV = end - baseline_end (+4d SLIPPING)
 ```
 
 ### Step-by-Step Flow:
-1. **Trigger**: The initial project plan is agreed upon with the executive sponsor.
+1. **Trigger**: Executive sponsors sign off on the baseline project delivery schedule.
 2. **Action**:
-   - Project Manager clicks **"Capture New Baseline"** in the top action bar.
-   - Enters Label: `"V1.0 Contractual Target"`.
-   - Frontend calls `POST /api/v1/projects/{id}/baselines`.
+   - Delivery Lead clicks the **Baseline Pill** in the secondary utility bar and selects **"Lock New Baseline"**.
+   - Enters Version Label: `"V1.0 Contractual Target"`.
+   - Frontend calls `POST /api/v1/projects/{p}/baselines`.
 3. **Execution**:
-   - The backend records a new version in `baseline_versions`, marks `has_locked_baseline = true`, and snapshots all current task dates into `task_baselines`.
-4. **Drift Detection**:
-   - Two weeks into execution, a supplier delay pushes Task 1.2 from Oct 19 to Oct 25 (+4 working days).
-   - When the task is updated, DeliverOps recalculates:
-     $$FV = \text{Oct 25} - \text{Oct 19} = +4\text{ working days}$$
-   - The Gantt chart renders a **ghost baseline bar** beneath the active bar, giving immediate visual feedback that Task 1.2 is 4 days behind baseline commitment.
-   - The Executive Dashboard registers a +4d Schedule Variance alert.
+   - Backend writes an immutable snapshot row into `baseline_versions` and all current task coordinates into `task_baselines`.
+   - Sets `projects.has_locked_baseline = true`.
+4. **Drift Detection & Visual Ghost Bars**:
+   - Two weeks later, hardware procurement delays push Task 1.2 by 4 working days.
+   - The Gantt engine renders a **ghost baseline bar** beneath the active task bar.
+   - The secondary utility bar displays a live badge: `Finish Variance: +4d (Slipping)`.
+   - The Executive EVM Dashboard recalculates the Schedule Performance Index ($SPI = \frac{EV}{PV}$).
 
 ---
 
-## 4. Scenario 4: Blocker Emergence & Multi-Risk Task Freezing
+## 5. Scenario 5: Blocker Emergence & Multi-Risk Task Locking
 
 ```
-[Hardware Failure] ──► Add Risk to Register (Severity: High)
-                             │
-                             ├─► Link Risk to Task 1.2 via risk_task_blockers
-                             │   └─► Task status set to "Blocked"
-                             │   └─► Pre-blocked state preserved in block_reason
-                             │
-                             ▼ (Replacement Arrives)
-[Mark Risk Resolved] ──► System Evaluates Active Blockers Count
-                             └─► If active_blockers == 0:
-                                   └─► Task status restored to "In Progress"
-                                   └─► Blocker reason cleared
+[Power Surge Incident] ──► Register Risk (Severity: Critical)
+                               │
+                               ├─► Link Risk to Task 1.2 in Affected Tasks selector
+                               │   └─► Task status set to "Blocked"
+                               │   └─► Preserves previous state: "In Progress||Power Surge"
+                               │
+                               ▼ (Stabilizer Installed & Tested)
+[Mark Risk Resolved] ──► System Evaluates Remaining Active Blockers
+                               └─► Active blockers count == 0:
+                                     └─► Task status restored to "In Progress"
+                                     └─► Blocker reason cleared
 ```
 
 ### Step-by-Step Flow:
-1. **Trigger**: An integration engineer discovers that incoming power at the plant is fluctuating, threatening the scale sensors.
+1. **Trigger**: An on-site electrical fault prevents calibration of industrial scales.
 2. **Action**:
-   - PM opens the **Risk Register Modal** and clicks **"+ Register Risk"**.
-   - Enters Title: `"Substation Voltage Fluctuations"`, Likelihood: `High`, Impact: `High`, Severity: `Critical`.
-   - In the **Affected Tasks** selector, links Task 1.2 (`Calibrate Weight Sensors`).
+   - Lead Engineer opens the **Risk Register Modal** (`Ctrl+R` or header action).
+   - Creates Risk: `"Plant Voltage Fluctuations"`, Severity: `Critical`, Impact: `High`.
+   - Links Task 1.2 (`Calibrate Weight Sensors`) under **Affected Tasks**.
 3. **Execution**:
-   - Frontend calls `POST /api/v1/projects/{id}/risks`.
-   - The backend creates the risk, associates the task via `risk_task_blockers`, preserves the prior state (`In Progress||Substation Voltage Fluctuations`) in `tasks.block_reason`, and sets `status = 'Blocked'`.
-4. **Resolution**:
-   - Industrial stabilizers are installed. PM updates risk status from `open` to `resolved`.
-   - `ProjectRiskService` checks remaining open/mitigating risks for Task 1.2.
-   - Count $= 0 \to$ Task 1.2 is automatically restored to its previous state (`In Progress`).
+   - Frontend submits `POST /api/v1/projects/{p}/risks`.
+   - Backend links `risk_task_blockers`, preserves prior status in `tasks.block_reason`, and updates status to `Blocked`.
+   - The WBS table highlights Task 1.2 with a crimson badge, and the Gantt bar displays an animated hatched warning pattern.
+4. **Multi-Blocker Release**:
+   - If Task 1.2 is blocked by both Risk A and Risk B, resolving Risk A will keep the task `Blocked`.
+   - Only when both Risk A and Risk B transition to `resolved` or `closed` will the task automatically revert to `In Progress`.
 
 ---
 
-## 5. Scenario 5: Quality Gate Sign-off (Anti-Self-Approval Enforcement)
+## 6. Scenario 6: Quality Gate Sign-Off & Anti-Self-Approval Review
 
 ```
-[Engineer Tariq: 100% Work Done]
+[Author Tariq: 100% Work Done]
                │
-               ├─► Clicks "Request Review"
-               │   └─► Assigns Reviewer: Ahmed Khalil (Lead PM)
-               │   └─► Task status -> "In Review" (pending_review)
+               ├─► Clicks "Request Review" in Task Details Drawer
+               │   └─► Designates Lead PM: Ahmed Khalil
+               │   └─► Task transitions to "In Review" (pending_review)
                │
-               ├─► Tariq attempts to click "Approve"
+               ├─► Tariq attempts to approve his own deliverable
                │   └─► ❌ HTTP 403 Forbidden (REVIEW_SELF_APPROVAL_PROHIBITED)
                │
                ▼
 [Independent Reviewer Ahmed inspects deliverable]
                │
-      ┌────────┴────────┐
-      ▼                 ▼
-[Approve]           [Request Changes]
+       ┌───────┴───────┐
+       ▼               ▼
+[Approve Task]     [Request Changes]
 Task -> "Completed" Task -> "In Progress"
 pct = 100%          pct rolled back (<= 95%)
-review_status =     review_status =
-"approved"          "changes_requested"
+review_status =     review_status = "changes_requested"
+"approved"          Mandatory review note attached
 ```
 
 ### Step-by-Step Flow:
-1. **Trigger**: Contributor Tariq completes hardware calibration for Task 1.1.
+1. **Trigger**: Contributor Tariq completes cabling deliverables for Task 1.1.
 2. **Action**:
-   - Tariq sets progress to 100% and clicks **"Request Review"** in the Task Details Drawer.
-   - Designates Lead Engineer Ahmed Khalil as reviewer.
-   - Task enters `In Review` with `review_status = 'pending_review'`.
-3. **Anti-Self-Approval Guard**:
-   - If Tariq (author, primary owner, or contributor) attempts to approve the task, the server rejects the request:
-     `HTTP 403 Forbidden` with error code `REVIEW_SELF_APPROVAL_PROHIBITED`.
-4. **Independent Review Decision**:
-   - **Path A (Approve)**: Independent reviewer Ahmed inspects the calibration logs and approves:
-     - Task transitions to `Completed`, `review_status = 'approved'`, progress locked at 100%.
-   - **Path B (Changes Requested)**: Ahmed notes sensor noise and requests changes with note `"Recalibrate with 500kg test weights"`:
-     - Task returns to `In Progress`, `review_status = 'changes_requested'`, progress rolled back to 90%.
+   - Tariq sets progress to 100% and clicks **"Request Review"** in the Task Drawer.
+   - Designates Delivery Lead Ahmed Khalil as reviewer.
+   - Status updates to `In Review` (`review_status = 'pending_review'`).
+3. **Anti-Self-Approval Guard Enforcement**:
+   - If Tariq (or any contributor allocated effort on the task) clicks "Approve", the server rejects the request with HTTP 403:
+     `REVIEW_SELF_APPROVAL_PROHIBITED`.
+4. **Independent Approval Decision**:
+   - **Path A (Approved)**: Ahmed conducts the quality walkthrough, confirms sign-off, and clicks **"Approve"**. Status becomes `Completed`, `review_status = 'approved'`.
+   - **Path B (Changes Requested)**: Ahmed notes incomplete termination labeling, enters a rejection note, and clicks **"Request Changes"**. The task reverts to `In Progress`, `review_status = 'changes_requested'`, and progress is rolled back to 90%.
 
 ---
 
-## 6. Scenario 6: Resource Capacity Leveling & Over-Allocation Mitigation
+## 7. Scenario 7: People View Capacity Leveling & Over-Allocation Mitigation
 
 ```
-[People View Heatmap]
-Week 42:
-  Ahmed: 35h / 40h (Green - 88%)
+[People View Matrix]
+Week 42 (Oct 12 - Oct 18):
+  Ahmed: 35h / 40h (Green - 88% Optimal)
   Tariq: 48h / 40h (RED ALERT - 120% OVER-ALLOCATED)
-  Sarah: 20h / 40h (Green - 50% UNDER-UTILIZED)
+  Sarah: 20h / 40h (Green - 50% Available)
                │
-               ▼ [PM Rebalances Effort]
+               ▼ [Lead Rebalances Effort in Capacity Drawer]
 Reallocates 15h of Task 1.3 from Tariq to Sarah
                │
                ▼
@@ -200,43 +230,66 @@ Week 42 Updated:
 ```
 
 ### Step-by-Step Flow:
-1. **Trigger**: Delivery lead reviews weekly engineering capacity in the **People View**.
-2. **Inspection**:
-   - The **Weekly Workload Heatmap** highlights Tariq Mansoor with a crimson warning badge (48 allocated hours against a 40h weekly limit).
-3. **Action**:
-   - Delivery lead inspects Tariq's active tasks during Week 42.
-   - Opens Task 1.3 ("Network Cable Runs") and adjusts contributor effort in `AssigneeCombobox`:
-     - Reduces Tariq's allocation from 20 hours to 5 hours.
-     - Adds Sarah Loutfy with 15 hours.
+1. **Trigger**: Delivery Lead reviews team workload for the upcoming sprint.
+2. **Action**:
+   - Switches view from **Matrix** to **People** via the primary navigation pills.
+   - The capacity matrix flags Tariq in crimson (48 allocated hours against a 40-hour weekly cap).
+3. **Adjustment**:
+   - Opens the **Capacity Drawer** for Tariq.
+   - Reallocates 15 hours of Task 1.3 to Sarah Loutfy.
 4. **Result**:
-   - The heatmap immediately refreshes. Tariq drops to 33h (optimal green) and Sarah moves to 35h (optimal green), preventing delivery bottlenecks.
+   - Workload updates dynamically in real-time. Both engineers enter optimal green capacity thresholds, eliminating sprint burn-out risks.
 
 ---
 
-## 7. Scenario 7: Legacy Project JSON Import with Idempotent Network Retries
+## 8. Scenario 8: Split-Pane CLAYGANTT Matrix High-Density Navigation
 
 ```
-[Client App] ──► POST /api/v1/projects/import (with X-Idempotency-Key: "mig-9821")
-                       │
-                       ├─► [Server processes 5-pass import in DB transaction]
-                       │
-                       ▼ (Network timeout interrupts client connection)
-[Client App] ──► RETRIES: POST /api/v1/projects/import (same X-Idempotency-Key)
-                       │
-                       └─► Server detects existing key & matching SHA-256 hash
-                       └─► Returns cached HTTP 200 without creating duplicate project!
+[High-Density Workspace Interaction]
+   │
+   ├─► 1. Split-Pane Adjustment:
+   │   └─► Drags 6px divider handle to resize WBS / Gantt ratio (clamped 20% to 80%)
+   │   └─► Double-clicks divider to reset to perfect 46% / 54% default split
+   │
+   ├─► 2. Quick Command Palette (Cmd+K / Ctrl+K):
+   │   └─► Types "Critical" -> filters view to critical path tasks only
+   │   └─► Types "Export" -> triggers instant SVG / PDF export
+   │
+   ├─► 3. Timeline Zoom Navigation:
+   │   └─► Uses Zoom Slider: Days (32px) <-> Weeks (64px) <-> Months (120px)
+   │   └─► Virtualized canvas only renders visible date columns and rows
+   │
+   └─► 4. 200ms Glassmorphic Task Hover Card:
+       └─► Hovering over any Gantt bar renders high-density popover with owner, dates, float, and blockers
+```
+
+---
+
+## 9. Scenario 9: Multi-Tenant Legal Holds & Audit Trail Verification
+
+```
+[Compliance Officer: Audit Inspection]
+   │
+   ├─► 1. Places Legal Hold on Project FSM-2026
+   │   └─► POST /api/v1/compliance/legal-holds
+   │   └─► Freezes entity: DELETE /projects/{id} is strictly blocked
+   │
+   ├─► 2. Runs Cryptographic Hash Verification
+   │   └─► GET /api/v1/audit/verify-chain
+   │   └─► Validates SHA-256 seal across every historical audit entry
+   │
+   └─► 3. Exports Tamper-Proof Audit Certificate
+       └─► Returns JSON cryptographic validation report for external auditors
 ```
 
 ### Step-by-Step Flow:
-1. **Trigger**: System administrator migrates a project from an external system.
+1. **Trigger**: Corporate legal counsel places an active delivery dispute under formal legal hold.
 2. **Action**:
-   - Calls `POST /api/v1/projects/import` with header `X-Idempotency-Key: req-2026-f8a1`.
-3. **5-Pass Topological Import**:
-   - **Pass 1**: Provisions project record.
-   - **Pass 2**: Inserts all tasks as flat nodes to generate ULIDs and build legacy ID mapping dictionary.
-   - **Pass 3**: Resolves hierarchical `parent_id` foreign keys.
-   - **Pass 4**: Resolves predecessor dependency links and multi-contributor effort allocations.
-   - **Pass 5**: Resolves risks and links blocker IDs to affected tasks.
-4. **Idempotency Protection**:
-   - The transaction commits and saves the response hash in `idempotency_keys`.
-   - If a network glitch causes the client to retry, the second request immediately returns the existing project without duplicate database inserts.
+   - Navigates to **Compliance & Legal Holds** and clicks **"Create Legal Hold"**.
+   - Selects Project `FSM-2026` and enters matter reference: `LIT-2026-092`.
+3. **Enforcement**:
+   - Any attempt to soft-delete or purge the project, tasks, or documents is intercepted by `EnforceLegalHoldMiddleware` and rejected with HTTP 403 `LEGAL_HOLD_ACTIVE`.
+4. **Audit Hash Verification**:
+   - Compliance officer clicks **"Verify Audit Chain"**.
+   - Backend iterates over `audit_logs` table, recomputing $H_n = \text{SHA-256}(H_{n-1} + \text{Payload})$.
+   - Confirms that zero records have been altered in the database, producing a signed cryptographic compliance certificate.

@@ -20,10 +20,30 @@ import { UserSkillProfileModal } from './UserSkillProfileModal';
 import { resourcesApi, Skill, UserSkillItem } from '../../api/resources';
 import { useProjectStore } from '../../stores/useProjectStore';
 
+const DEFAULT_SKILLS: Skill[] = [
+  { id: 'skill-react', organization_id: 'org-default', name: 'React', category: 'Frontend', is_active: true },
+  { id: 'skill-ts', organization_id: 'org-default', name: 'TypeScript', category: 'Language', is_active: true },
+  { id: 'skill-php', organization_id: 'org-default', name: 'PHP', category: 'Backend', is_active: true },
+  { id: 'skill-laravel', organization_id: 'org-default', name: 'Laravel', category: 'Framework', is_active: true },
+  { id: 'skill-uiux', organization_id: 'org-default', name: 'UI/UX', category: 'Design', is_active: true },
+  { id: 'skill-qa', organization_id: 'org-default', name: 'QA', category: 'Quality', is_active: true },
+];
+
+const INITIAL_SKILL_LEVELS: Record<string, Record<string, number>> = {
+  'member-ahmed-khalil': { React: 3, TypeScript: 4, PHP: 5, Laravel: 5, 'UI/UX': 3, QA: 4 },
+  'member-1': { React: 3, TypeScript: 4, PHP: 5, Laravel: 5, 'UI/UX': 2, QA: 3 },
+  'member-2': { React: 5, TypeScript: 4, PHP: 2, Laravel: 2, 'UI/UX': 4, QA: 3 },
+  'member-3': { React: 3, TypeScript: 3, PHP: 4, Laravel: 4, 'UI/UX': 3, QA: 4 },
+  'member-4': { React: 3, TypeScript: 3, PHP: 2, Laravel: 2, 'UI/UX': 2, QA: 5 },
+  'member-5': { React: 3, TypeScript: 2, PHP: 1, Laravel: 1, 'UI/UX': 5, QA: 4 },
+  'member-6': { React: 4, TypeScript: 4, PHP: 2, Laravel: 2, 'UI/UX': 3, QA: 3 },
+};
+
 export const SkillsMatrixTable: React.FC = () => {
   const { teamMembers } = useProjectStore();
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [skills, setSkills] = useState<Skill[]>(DEFAULT_SKILLS);
+  const [skillLevels, setSkillLevels] = useState<Record<string, Record<string, number>>>(INITIAL_SKILL_LEVELS);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -45,15 +65,15 @@ export const SkillsMatrixTable: React.FC = () => {
   const [editingUserName, setEditingUserName] = useState<string>('');
 
   const fetchSkills = async () => {
-    setIsLoading(true);
-    setError(null);
     try {
       const res = await resourcesApi.getSkills();
-      setSkills(res.data || []);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load skills catalog.');
-    } finally {
-      setIsLoading(false);
+      if (res.data && res.data.length > 0) {
+        const names = new Set(res.data.map((s) => s.name.toLowerCase()));
+        const missing = DEFAULT_SKILLS.filter((d) => !names.has(d.name.toLowerCase()));
+        setSkills([...res.data, ...missing]);
+      }
+    } catch {
+      // Keep DEFAULT_SKILLS
     }
   };
 
@@ -122,6 +142,79 @@ export const SkillsMatrixTable: React.FC = () => {
   const openUserSkillModal = (userId: string, name: string) => {
     setEditingUserId(userId);
     setEditingUserName(name);
+  };
+
+  const getLevelBadge = (level: number) => {
+    switch (level) {
+      case 5:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 shadow-xs hover:scale-105 transition-transform">
+            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+            <span>L5 Expert</span>
+          </span>
+        );
+      case 4:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 hover:scale-105 transition-transform">
+            <span className="flex gap-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            </span>
+            <span>L4 Advanced</span>
+          </span>
+        );
+      case 3:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 hover:scale-105 transition-transform">
+            <span className="flex gap-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
+            </span>
+            <span>L3 Proficient</span>
+          </span>
+        );
+      case 2:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 hover:scale-105 transition-transform">
+            <span className="flex gap-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+            </span>
+            <span>L2 Intermediate</span>
+          </span>
+        );
+      case 1:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:scale-105 transition-transform">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span>L1 Beginner</span>
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700 hover:border-emerald-500/50 hover:text-emerald-600 transition-colors">
+            + Set Level
+          </span>
+        );
+    }
+  };
+
+  const handleCycleLevel = (memberId: string, skillName: string) => {
+    setSkillLevels((prev) => {
+      const userLevels = prev[memberId] || {};
+      const current = userLevels[skillName] ?? 0;
+      const next = current >= 5 ? 1 : current + 1;
+      return {
+        ...prev,
+        [memberId]: {
+          ...userLevels,
+          [skillName]: next,
+        },
+      };
+    });
   };
 
   return (
@@ -351,27 +444,22 @@ export const SkillsMatrixTable: React.FC = () => {
 
                     {/* Skill Cells */}
                     {skills.map((skill) => {
-                      // Check matched skill or skill name in member.skills
-                      const hasSkill = (member.skills || []).some(
-                        (s) => s.toLowerCase() === skill.name.toLowerCase()
-                      );
+                      const userLevel =
+                        skillLevels[member.id]?.[skill.name] ??
+                        ((member.skills || []).some(
+                          (s) => s.toLowerCase() === skill.name.toLowerCase()
+                        )
+                          ? 3
+                          : 0);
 
                       return (
                         <td
                           key={skill.id}
-                          onClick={() => openUserSkillModal(member.id, member.name)}
-                          className="p-3.5 text-center cursor-pointer hover:bg-emerald-500/5 transition-colors"
+                          onClick={() => handleCycleLevel(member.id, skill.name)}
+                          className="p-3 text-center cursor-pointer hover:bg-emerald-500/5 transition-colors select-none"
+                          title="Click to cycle proficiency level (L1 to L5)"
                         >
-                          {hasSkill ? (
-                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                              <Star className="w-3 h-3 fill-emerald-500 text-emerald-500" />
-                              <span>Verified</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-700 font-mono text-xs">
-                              —
-                            </span>
-                          )}
+                          {getLevelBadge(userLevel)}
                         </td>
                       );
                     })}

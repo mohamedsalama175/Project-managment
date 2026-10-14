@@ -1,490 +1,177 @@
 # 05. Backend Architecture & Scheduling Engine
 
+> **Document ID:** `DOC-05-BACKEND-ARCHITECTURE`  
+> **Status:** Production-Verified / Field-Tested  
+> **Version:** 2.2.0 (Laravel 12 Modulith Architecture)  
+> **Harmonized With:** 01-BUSINESS, 02-FEATURES, 03-CRUD, 06-API, 09-SECURITY, 12-OPENAPI
+
+---
+
 ## 1. Modular Monolith (Modulith) Architecture
 
-The **DeliverOps** backend is architected as an explicit **Modular Monolith (Modulith)** in Laravel 12 running on PHP 8.2+ and MySQL 8.0 InnoDB.
+The **DeliverOps** backend is engineered as an enterprise-grade **Modular Monolith (Modulith)** in Laravel 12 running on PHP 8.2+ and MySQL 8.0 InnoDB.
 
-Every bounded context is isolated as an autonomous module under [`backend/app/Modules/`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/backend/app/Modules) with its own **Controllers**, **Services**, **Form Requests**, **API Resources**, and **Policies**.
+Every bounded context is encapsulated as an autonomous module under [`backend/app/Modules/`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/backend/app/Modules) with its own **Controllers**, **Services**, **Form Requests**, **API Resources**, and **Policies**:
 
 ```
 backend/app/Modules/
-├── Identity/          # Authentication, Users, Roles, Permissions & Spatie RBAC
-├── Projects/          # Project lifecycle, rosters, config schema, multi-baselines
-├── Scheduling/        # Mathematical CPM Engine (DAG topological sort, SS/FF/FS, Lags, Float)
-├── Tasks/             # WBS hierarchy, effort-weighted rollups, linear reordering
-├── Risks/             # Risk register, 3x3 scoring matrix, multi-blocker task linking
-├── Baselines/         # Multi-baseline versioning, lock snapshots, variance calculation
-├── Collaboration/     # Review workflows (anti-self-approval) & threaded discussions
-└── Audit/             # Immutable polymorphic audit logs & 5-pass idempotent import/export
+├── AI/             # AI Project Copilot, task effort auto-estimation, risk prediction
+├── Audit/          # Forensic hash-chained audit logging & 5-pass idempotent import/export
+├── Automation/     # Event-driven automation rules, triggers, and webhook dispatch
+├── Baselines/      # Point-in-time WBS snapshots, baseline locking, variance tracking
+├── Collaboration/  # Review workflows (anti-self-approval) & threaded discussions
+├── Compliance/     # GDPR DSAR export & erasure requests, legal holds, SLA metrics
+├── Financials/     # SOW milestone invoicing, burn rate runway, rate cards, budget tracking
+├── Identity/       # Authentication (Sanctum SPA sessions & Bearer tokens), MFA, Spatie RBAC
+├── Integrations/   # Webhooks, Slack, Microsoft Teams, third-party sync connectors
+├── Monitoring/     # Health checks, metric telemetry, system diagnostics
+├── Notifications/  # Multi-channel notification delivery (in-app drawer, email, webhooks)
+├── Onboarding/     # First-run setup checklist, interactive walkthrough progress
+├── Projects/       # Multi-tenant project lifecycle, rosters, config schema (MENA calendars)
+├── Resources/      # Resource capacity, time-off calendar, skills matrix, capacity leveling
+├── Risks/          # Risk, Issue & Blocker (RIB) register, 3x3 scoring, multi-blocker linking
+├── Scheduling/     # Mathematical CPM Engine (Kahn's algorithm, DAG sort, float calculation)
+├── System/         # Platform health, installation state verification (`/system/status`)
+├── Tasks/          # Hierarchical WBS tree, effort-weighted rollups, linear reordering
+├── Templates/      # Project templates catalog, industry presets, clone-to-project engine
+└── Tenancy/        # Multi-tenancy architecture, organization scoping, member invitations
 ```
 
 ### Module Boundary Rules:
-1. **Isolated Service Layer**: Inter-module interactions take place strictly through injected service interfaces or domain events, never through cross-boundary model mutations.
-2. **Transaction Boundaries**: State transitions (e.g., risk resolution unblocking tasks, review sign-offs, baseline locks) execute within atomic `DB::transaction()` blocks.
-3. **Service-Level Invariants**: Security invariants (anti-self-approval, self-deletion, last-admin lock) reside in domain services so they cannot be bypassed by `Gate::before()` admin overrides.
+1. **Isolated Service Layer**: Inter-module communication occurs strictly via injected service interfaces or domain events, preventing cross-boundary model corruption.
+2. **Atomic Transaction Boundaries**: Multi-entity mutations (e.g., risk resolution unblocking multiple tasks, review approvals, baseline locks) execute inside atomic `DB::transaction()` blocks.
+3. **Service-Level Invariants**: Core security rules (anti-self-approval, self-deletion locks, last-admin protection, tenant isolation) are enforced in domain services so they cannot be bypassed by `Gate::before()` admin overrides.
 
 ---
 
-## 2. Complete Database DDL & Schema Architecture (MySQL 8.0 InnoDB)
+## 2. Multi-Tenancy Architecture & Data Isolation
 
-All primary keys are `CHAR(26)` **ULIDs**. All foreign keys are indexed. Character set is `utf8mb4` with collation `utf8mb4_unicode_ci`.
+DeliverOps enforces **strict logical multi-tenancy** at the database, query, and middleware levels:
 
-```sql
--- =============================================================================
--- 1. IDENTITY & RBAC DOMAIN
--- =============================================================================
+### 2.1 Schema-Level Tenant Scoping (`organization_id`)
+Every tenant-scoped table contains an `organization_id CHAR(26)` foreign key referencing `organizations.id` with `ON DELETE RESTRICT`:
+- Tables scoped: `users`, `projects`, `tasks`, `task_dependencies`, `project_risks`, `baseline_versions`, `timesheets`, `expenses`, `invoices`, `api_keys`, `webhooks`, `automation_rules`, `audit_logs`.
+- Enforced via migration `2026_10_13_000006_enforce_not_null_and_foreign_keys_on_organization_id.php`.
 
-CREATE TABLE `users` (
-  `id` CHAR(26) NOT NULL,
-  `name` VARCHAR(255) NOT NULL,
-  `email` VARCHAR(255) NOT NULL,
-  `active_email` VARCHAR(255) GENERATED ALWAYS AS (IF(`deleted_at` IS NULL, `email`, NULL)) VIRTUAL,
-  `password` VARCHAR(255) NOT NULL,
-  `phone` VARCHAR(50) NULL,
-  `avatar_path` VARCHAR(255) NULL,
-  `job_title` VARCHAR(150) NOT NULL DEFAULT 'Team Member',
-  `department` VARCHAR(100) NOT NULL DEFAULT 'Engineering',
-  `skills` JSON NULL,
-  `weekly_capacity_hours` DECIMAL(5,2) NOT NULL DEFAULT 40.00,
-  `status` ENUM('active', 'on_leave', 'inactive') NOT NULL DEFAULT 'active',
-  `color` VARCHAR(7) NOT NULL DEFAULT '#1f8a70',
-  `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
-  `email_verified_at` TIMESTAMP NULL,
-  `remember_token` VARCHAR(100) NULL,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  `deleted_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `users_active_email_unique` (`active_email`),
-  KEY `users_department_status_idx` (`department`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Spatie RBAC Tables with CHAR(26) ULIDs
-CREATE TABLE `permissions` (
-  `id` CHAR(26) NOT NULL,
-  `name` VARCHAR(125) NOT NULL,
-  `guard_name` VARCHAR(50) NOT NULL DEFAULT 'web',
-  `group_name` VARCHAR(50) NOT NULL DEFAULT 'general',
-  `description` VARCHAR(255) NULL,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `permissions_name_guard_unique` (`name`, `guard_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `roles` (
-  `id` CHAR(26) NOT NULL,
-  `name` VARCHAR(50) NOT NULL,
-  `guard_name` VARCHAR(50) NOT NULL DEFAULT 'web',
-  `display_name` VARCHAR(100) NOT NULL,
-  `description` VARCHAR(255) NULL,
-  `is_system` TINYINT(1) NOT NULL DEFAULT 0,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `roles_name_guard_unique` (`name`, `guard_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `model_has_permissions` (
-  `permission_id` CHAR(26) NOT NULL,
-  `model_type` VARCHAR(255) NOT NULL,
-  `model_id` CHAR(26) NOT NULL,
-  PRIMARY KEY (`permission_id`, `model_id`, `model_type`),
-  KEY `model_has_permissions_model_idx` (`model_id`, `model_type`),
-  CONSTRAINT `fk_mhp_permission` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `model_has_roles` (
-  `role_id` CHAR(26) NOT NULL,
-  `model_type` VARCHAR(255) NOT NULL,
-  `model_id` CHAR(26) NOT NULL,
-  PRIMARY KEY (`role_id`, `model_id`, `model_type`),
-  KEY `model_has_roles_model_idx` (`model_id`, `model_type`),
-  CONSTRAINT `fk_mhr_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `role_has_permissions` (
-  `permission_id` CHAR(26) NOT NULL,
-  `role_id` CHAR(26) NOT NULL,
-  PRIMARY KEY (`permission_id`, `role_id`),
-  KEY `role_has_permissions_role_idx` (`role_id`),
-  CONSTRAINT `fk_rhp_permission` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_rhp_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =============================================================================
--- 2. PROJECTS & BASELINES DOMAIN
--- =============================================================================
-
-CREATE TABLE `projects` (
-  `id` CHAR(26) NOT NULL,
-  `name` VARCHAR(255) NOT NULL,
-  `code` VARCHAR(50) NOT NULL,
-  `description` TEXT NULL,
-  `client_name` VARCHAR(255) NULL,
-  `project_type` ENUM('client', 'internal', 'unclassified') NOT NULL DEFAULT 'unclassified',
-  `project_manager_id` CHAR(26) NOT NULL,
-  `config` JSON NOT NULL,
-  `has_locked_baseline` TINYINT(1) NOT NULL DEFAULT 0,
-  `baseline_locked_at` DATETIME NULL,
-  `active_baseline_version` INT UNSIGNED NOT NULL DEFAULT 0,
-  `target_launch_date` DATE NULL,
-  `tree_version` INT UNSIGNED NOT NULL DEFAULT 1,
-  `is_archived` TINYINT(1) NOT NULL DEFAULT 0,
-  `archived_at` TIMESTAMP NULL,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  `deleted_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `projects_code_unique` (`code`),
-  KEY `projects_pm_idx` (`project_manager_id`),
-  KEY `projects_status_idx` (`is_archived`, `deleted_at`),
-  CONSTRAINT `fk_projects_pm` FOREIGN KEY (`project_manager_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `project_user` (
-  `id` CHAR(26) NOT NULL,
-  `project_id` CHAR(26) NOT NULL,
-  `user_id` CHAR(26) NOT NULL,
-  `role` VARCHAR(50) NOT NULL DEFAULT 'contributor',
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `project_user_unique` (`project_id`, `user_id`),
-  KEY `project_user_user_idx` (`user_id`),
-  CONSTRAINT `fk_pu_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_pu_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `baseline_versions` (
-  `id` CHAR(26) NOT NULL,
-  `project_id` CHAR(26) NOT NULL,
-  `version_number` INT UNSIGNED NOT NULL,
-  `name` VARCHAR(100) NOT NULL,
-  `description` TEXT NULL,
-  `locked_by_id` CHAR(26) NOT NULL,
-  `snapshot_data` JSON NOT NULL,
-  `is_active` TINYINT(1) NOT NULL DEFAULT 0,
-  `created_at` TIMESTAMP NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `baseline_project_version_unique` (`project_id`, `version_number`),
-  KEY `baseline_project_active_idx` (`project_id`, `is_active`),
-  CONSTRAINT `fk_bv_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_bv_user` FOREIGN KEY (`locked_by_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =============================================================================
--- 3. TASKS & WBS DOMAIN
--- =============================================================================
-
-CREATE TABLE `tasks` (
-  `id` CHAR(26) NOT NULL,
-  `project_id` CHAR(26) NOT NULL,
-  `parent_id` CHAR(26) NULL,
-  `wbs_code` VARCHAR(50) NOT NULL,
-  `name` VARCHAR(255) NOT NULL,
-  `description` TEXT NULL,
-  `category` VARCHAR(50) NOT NULL DEFAULT 'general',
-  `priority` ENUM('Low', 'Medium', 'High', 'Urgent') NOT NULL DEFAULT 'Medium',
-  `start_date` DATE NOT NULL,
-  `end_date` DATE NOT NULL,
-  `baseline_start_date` DATE NULL,
-  `baseline_end_date` DATE NULL,
-  `pct` UNSIGNED TINYINT NOT NULL DEFAULT 0,
-  `is_milestone` TINYINT(1) NOT NULL DEFAULT 0,
-  `is_summary` TINYINT(1) NOT NULL DEFAULT 0,
-  `status` ENUM('Not Started', 'In Progress', 'In Review', 'Blocked', 'Completed') NOT NULL DEFAULT 'Not Started',
-  `review_status` ENUM('none', 'pending_review', 'approved', 'changes_requested') NOT NULL DEFAULT 'none',
-  `order_index` INT UNSIGNED NOT NULL DEFAULT 0,
-  `primary_owner_id` CHAR(26) NULL,
-  `primary_owner_hours` DECIMAL(7,2) NULL,
-  `reviewer_id` CHAR(26) NULL,
-  `submitted_by_id` CHAR(26) NULL,
-  `blocking_risk_id` CHAR(26) NULL,
-  `block_reason` TEXT NULL,
-  `review_note` TEXT NULL,
-  `estimated_hours` DECIMAL(7,2) NULL,
-  `logged_hours` DECIMAL(7,2) NOT NULL DEFAULT 0.00,
-  `lock_version` INT UNSIGNED NOT NULL DEFAULT 1,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `tasks_project_id_unique` (`project_id`, `id`),
-  KEY `tasks_project_order_idx` (`project_id`, `order_index`),
-  KEY `tasks_parent_idx` (`parent_id`),
-  KEY `tasks_owner_idx` (`primary_owner_id`),
-  KEY `tasks_status_idx` (`project_id`, `status`),
-  CONSTRAINT `fk_tasks_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_tasks_parent` FOREIGN KEY (`parent_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_tasks_owner` FOREIGN KEY (`primary_owner_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_tasks_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_tasks_submitter` FOREIGN KEY (`submitted_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `task_dependencies` (
-  `id` CHAR(26) NOT NULL,
-  `project_id` CHAR(26) NOT NULL,
-  `task_id` CHAR(26) NOT NULL,
-  `predecessor_id` CHAR(26) NOT NULL,
-  `dependency_type` ENUM('finish_to_start', 'start_to_start', 'finish_to_finish') NOT NULL DEFAULT 'finish_to_start',
-  `lag_days` INT NOT NULL DEFAULT 0,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `task_dep_unique` (`task_id`, `predecessor_id`),
-  KEY `task_dep_pred_idx` (`predecessor_id`),
-  KEY `task_dep_project_idx` (`project_id`),
-  CONSTRAINT `fk_td_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_td_pred` FOREIGN KEY (`predecessor_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_td_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `task_effort_allocations` (
-  `id` CHAR(26) NOT NULL,
-  `task_id` CHAR(26) NOT NULL,
-  `user_id` CHAR(26) NOT NULL,
-  `allocated_hours` DECIMAL(7,2) NOT NULL DEFAULT 0.00,
-  `week_number` UNSIGNED TINYINT NULL,
-  `year` UNSIGNED SMALLINT NULL,
-  `lock_version` INT UNSIGNED NOT NULL DEFAULT 1,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `tea_task_user_week_unique` (`task_id`, `user_id`, `year`, `week_number`),
-  KEY `tea_user_task_idx` (`user_id`, `task_id`),
-  CONSTRAINT `fk_tea_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_tea_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `task_comments` (
-  `id` CHAR(26) NOT NULL,
-  `task_id` CHAR(26) NOT NULL,
-  `user_id` CHAR(26) NOT NULL,
-  `content` TEXT NOT NULL,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  KEY `task_comments_task_idx` (`task_id`, `created_at`),
-  KEY `task_comments_user_idx` (`user_id`),
-  CONSTRAINT `fk_tc_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_tc_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =============================================================================
--- 4. RISKS & BLOCKERS DOMAIN
--- =============================================================================
-
-CREATE TABLE `project_risks` (
-  `id` CHAR(26) NOT NULL,
-  `project_id` CHAR(26) NOT NULL,
-  `title` VARCHAR(255) NOT NULL,
-  `description` TEXT NOT NULL,
-  `type` ENUM('risk', 'issue', 'dependency', 'assumption') NOT NULL DEFAULT 'risk',
-  `severity` ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
-  `likelihood` ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'medium',
-  `impact` ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'medium',
-  `status` ENUM('open', 'mitigating', 'mitigated', 'resolved', 'closed') NOT NULL DEFAULT 'open',
-  `mitigation_plan` TEXT NOT NULL,
-  `owner_id` CHAR(26) NOT NULL,
-  `identified_date` DATE NOT NULL,
-  `due_date` DATE NOT NULL,
-  `created_at` TIMESTAMP NULL,
-  `updated_at` TIMESTAMP NULL,
-  PRIMARY KEY (`id`),
-  KEY `risks_project_status_idx` (`project_id`, `status`),
-  KEY `risks_owner_idx` (`owner_id`),
-  CONSTRAINT `fk_risks_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_risks_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `risk_task_blockers` (
-  `id` CHAR(26) NOT NULL,
-  `risk_id` CHAR(26) NOT NULL,
-  `task_id` CHAR(26) NOT NULL,
-  `created_at` TIMESTAMP NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `risk_task_unique` (`risk_id`, `task_id`),
-  KEY `rtb_task_idx` (`task_id`),
-  CONSTRAINT `fk_rtb_risk` FOREIGN KEY (`risk_id`) REFERENCES `project_risks` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_rtb_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =============================================================================
--- 5. ATTACHMENTS, NOTIFICATIONS, AUDIT & IDEMPOTENCY
--- =============================================================================
-
-CREATE TABLE `attachments` (
-  `id` CHAR(26) NOT NULL,
-  `attachable_type` VARCHAR(255) NOT NULL,
-  `attachable_id` CHAR(26) NOT NULL,
-  `uploaded_by_id` CHAR(26) NOT NULL,
-  `file_name` VARCHAR(255) NOT NULL,
-  `file_path` VARCHAR(500) NOT NULL,
-  `file_size_bytes` UNSIGNED INT NOT NULL,
-  `mime_type` VARCHAR(100) NOT NULL,
-  `created_at` TIMESTAMP NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `attachments_attachable_idx` (`attachable_type`, `attachable_id`),
-  CONSTRAINT `fk_attachments_user` FOREIGN KEY (`uploaded_by_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `notifications` (
-  `id` CHAR(26) NOT NULL,
-  `user_id` CHAR(26) NOT NULL,
-  `type` VARCHAR(100) NOT NULL,
-  `title` VARCHAR(255) NOT NULL,
-  `body` TEXT NOT NULL,
-  `action_url` VARCHAR(500) NULL,
-  `read_at` TIMESTAMP NULL,
-  `created_at` TIMESTAMP NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `notifications_user_unread_idx` (`user_id`, `read_at`),
-  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `audit_logs` (
-  `id` CHAR(26) NOT NULL,
-  `auditable_type` VARCHAR(255) NOT NULL,
-  `auditable_id` CHAR(26) NOT NULL,
-  `project_id` CHAR(26) NULL,
-  `action` VARCHAR(100) NOT NULL,
-  `actor_id` CHAR(26) NULL,
-  `old_values` JSON NULL,
-  `new_values` JSON NULL,
-  `reason` VARCHAR(255) NULL,
-  `created_at` TIMESTAMP NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `audit_entity_idx` (`auditable_type`, `auditable_id`),
-  KEY `audit_project_idx` (`project_id`, `created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `idempotency_keys` (
-  `id` CHAR(26) NOT NULL,
-  `user_id` CHAR(26) NOT NULL,
-  `idempotency_key` VARCHAR(255) NOT NULL,
-  `request_hash` CHAR(64) NOT NULL,
-  `response_code` INT NOT NULL,
-  `response_body` JSON NOT NULL,
-  `created_at` TIMESTAMP NOT NULL,
-  `expires_at` TIMESTAMP NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idempotency_user_key_unique` (`user_id`, `idempotency_key`),
-  KEY `idempotency_expires_idx` (`expires_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-```
+### 2.2 Global Multi-Tenant Scope & Middleware
+- Incoming requests supply the active organization via the `X-Organization-Id` header (or session `currentOrganizationId`).
+- `TenantScopeMiddleware` validates membership and injects the active organization into the tenant context.
+- Spatie Permissions operates in **Teams Mode**:
+  ```php
+  setPermissionsTeamId($organizationId);
+  ```
+  This ensures roles (`admin`, `project_manager`, `field_engineer`) are evaluated strictly within the context of the user's active tenant organization.
 
 ---
 
-## 3. Mathematical CPM Engine & Multi-Dependency Math
+## 3. Mathematical CPM Scheduling Engine
 
-The CPM Scheduling Engine supports **Finish-to-Start (FS)**, **Start-to-Start (SS)**, and **Finish-to-Finish (FF)** dependency relationships with positive or negative `lag_days`.
+The CPM Engine ([`SchedulingEngineService.php`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/backend/app/Modules/Scheduling/Services/SchedulingEngineService.php)) deterministically computes the Critical Path, project duration, and float margins.
 
-### 3.1 Mathematical Definitions
+### 3.1 Cycle Detection via Kahn's Algorithm
+Before computing schedule dates, the engine validates the project network as a Directed Acyclic Graph (DAG) using **Kahn's Algorithm**:
+1. Compute in-degree $\text{deg}^-(v)$ for every task node $v \in V$.
+2. Initialize queue $Q$ with all nodes having $\text{deg}^-(v) = 0$.
+3. While $Q$ is not empty:
+   - Dequeue $u$, append to sorted topological list $L$.
+   - For each successor $v$ of $u$: decrement $\text{deg}^-(v)$. If $\text{deg}^-(v) = 0$, enqueue $v$.
+4. If $|L| < |V|$, a dependency cycle exists. The engine throws `CpmCycleDetectedException` and aborts rescheduling.
 
-Let $P$ be a predecessor task and $S$ be a successor task. Duration $D \ge 1$ working days.
+### 3.2 Forward Pass (Early Dates Calculation)
+For each task $i$ in topological order:
+$$ES_i = \max_{p \in \text{Pred}(i)} \left( \text{AddWorkingDays}(EF_p, \text{Lag}_{p,i}) \right)$$
+$$EF_i = \text{AddWorkingDays}(ES_i, \text{Duration}_i - 1)$$
+*(For root tasks without predecessors, $ES = \text{ProjectStartDate}$)*.
 
-#### 1. Forward Pass (Early Dates):
-- **Finish-to-Start ($FS$) with Lag ($L$)**:
-  $$ES_S = \max \left( ES_S, \text{addWorkDays}(\text{nextWorkDay}(EF_P, \text{strictlyAfter}=\text{true}), L) \right)$$
-  $$EF_S = \text{addWorkDays}(ES_S, D_S - 1)$$
-- **Start-to-Start ($SS$) with Lag ($L$)**:
-  $$ES_S = \max \left( ES_S, \text{addWorkDays}(ES_P, L) \right)$$
-  $$EF_S = \text{addWorkDays}(ES_S, D_S - 1)$$
-- **Finish-to-Finish ($FF$) with Lag ($L$)**:
-  $$EF_S = \max \left( EF_S, \text{addWorkDays}(EF_P, L) \right)$$
-  $$ES_S = \text{subWorkDays}(EF_S, D_S - 1)$$
+### 3.3 Backward Pass (Late Dates Calculation)
+Let $T_{\text{target}} = \max(EF_{\text{terminal}}, \text{ProjectTargetDate})$. For each task $i$ in reverse topological order:
+$$LF_i = \min_{s \in \text{Succ}(i)} \left( \text{SubtractWorkingDays}(LS_s, \text{Lag}_{i,s}) \right)$$
+$$LS_i = \text{SubtractWorkingDays}(LF_i, \text{Duration}_i - 1)$$
+*(For terminal tasks without successors, $LF = T_{\text{target}}$)*.
 
-#### 2. Backward Pass (Late Dates):
-Let $ProjectFinish = \max_{t} (EF_t)$ or the project's contractual `target_launch_date`.
-- **Finish-to-Start ($FS$) with Lag ($L$)**:
-  $$LF_P = \min \left( LF_P, \text{subWorkDays}(\text{prevWorkDay}(LS_S, \text{strictlyBefore}=\text{true}), L) \right)$$
-  $$LS_P = \text{subWorkDays}(LF_P, D_P - 1)$$
-- **Start-to-Start ($SS$) with Lag ($L$)**:
-  $$LS_P = \min \left( LS_P, \text{subWorkDays}(LS_S, L) \right)$$
-  $$LF_P = \text{addWorkDays}(LS_P, D_P - 1)$$
-- **Finish-to-Finish ($FF$) with Lag ($L$)**:
-  $$LF_P = \min \left( LF_P, \text{subWorkDays}(LF_S, L) \right)$$
-  $$LS_P = \text{subWorkDays}(LF_P, D_P - 1)$$
+### 3.4 Float Calculations & Critical Path
+- **Total Float ($TF$)**:
+  $$TF_i = LS_i - ES_i = LF_i - EF_i$$
+- **Free Float ($FF$)**:
+  $$FF_i = \min_{s \in \text{Succ}(i)} (ES_s) - EF_i - 1$$
+- **Critical Path Condition**:
+  $$\text{IsCritical}(i) \iff TF_i \le 0$$
+  Tasks on the critical path have zero or negative float. Any delay on these tasks directly slips the project finish date.
 
-#### 3. Summary & Milestone Treatment:
-- **Milestones ($D = 0$)**: Early Start $\equiv$ Early Finish. Lags propagate directly.
-- **Summary Tasks**: Excluded from dependency DAG edges directly. A summary task's $ES = \min_{c \in \text{children}}(ES_c)$ and $EF = \max_{c \in \text{children}}(EF_c)$. Summary float is the minimum float of its children.
-
-#### 4. Total Float & Negative Float:
-- **Total Float ($TF$)**: $TF = LS - ES = LF - EF$.
-- **Negative Float ($TF < 0$)**: Occurs when a fixed `target_launch_date` is earlier than the forward-pass $ProjectFinish$, indicating the project is mathematically in breach of contract.
-- **Critical Path**: Every task where $TF \le \min_{t}(TF_t)$ (or $TF \le 0$ when no target date constraint is violated).
-
----
-
-## 4. Multi-Blocker Governance & State Restoration
-
-When multiple risks link to a single task via `risk_task_blockers`:
-1. **Transition to Blocked**:
-   - The task's status prior to blockage (`Not Started`, `In Progress`, or `In Review`) is preserved in `block_reason` formatted as: `PREV_STATUS||Risk Title`.
-   - Task `status` transitions to `Blocked`.
-2. **Resolution & Unblocking Condition**:
-   - When a risk transitions to `mitigated`, `resolved`, or `closed`, DeliverOps queries all remaining active blockers for the task:
-     ```php
-     $remainingActiveBlockers = RiskTaskBlocker::where('task_id', $task->id)
-         ->whereHas('risk', fn ($q) => $q->whereIn('status', ['open', 'mitigating']))
-         ->count();
-     ```
-   - **If $remainingActiveBlockers = 0$**: The task is restored to its exact pre-blocked state (`Not Started` vs `In Progress`), `blocking_risk_id` is set to `null`, and `block_reason` is cleared.
-   - **If $remainingActiveBlockers > 0$**: The task remains `Blocked`, and `blocking_risk_id` is re-pointed to the next highest severity active risk.
-   - **CPM Trigger**: `CpmSchedulingService::calculateCriticalPath($project)` executes automatically upon any blocker change.
+### 3.5 Working Days vs Calendar Days Engine
+The engine respects project-specific calendar configurations:
+- **Weekend Days**: Array of non-working days of the week (e.g., `[5, 6]` for MENA Friday/Saturday rest, `[0, 6]` for Western Saturday/Sunday rest).
+- **Holidays Register**: Array of specific dates (`YYYY-MM-DD`) treated as non-working holidays during date arithmetic.
+- When `duration_mode = 'working_days'`, non-working days are skipped during forward and backward passes.
 
 ---
 
-## 5. Security & Invariant Hierarchy
+## 4. Anti-Self-Approval Review Gate
+
+To enforce strict separation of duties and prevent unauthorized deliverable completions, the collaboration module implements **Anti-Self-Approval** ([`TaskReviewService.php`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/backend/app/Modules/Collaboration/Services/TaskReviewService.php)):
+
+$$\text{CanApprove}(u, t) \iff \text{hasRole}(u, 'project\_manager') \land (u.\text{id} \neq t.\text{submitted\_by}) \land (u.\text{id} \neq t.\text{primary\_owner\_id}) \land (u.\text{id} \notin t.\text{contributor\_ids})$$
+
+1. When a task reaches readiness, the author or owner clicks **"Request Review"**; the task transitions to `status = 'In Review'` with `review_status = 'pending_review'`.
+2. An independent Project Manager or Quality Reviewer must sign off on the task.
+3. If the author or any effort contributor attempts to call `/api/v1/tasks/{id}/review/approve`, the service throws `REVIEW_SELF_APPROVAL_FORBIDDEN` (HTTP 403).
+
+---
+
+## 5. Security & Middleware Pipeline
+
+All requests through the Laravel API pipeline pass through rigorous security middleware:
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   INVARIANT LEVEL                      │
-├─────────────────────────┬──────────────────────────────┤
-│ 1. Service Layer Invariant │ Unbypasable (No Gate Bypass)  │
-│    - Anti-Self-Approval    │ Checked inside Service Method│
-│    - Self-Deletion Guard   │ Throws 422 Exception         │
-│    - Last Admin Lock       │ Wrapped in DB Transaction    │
-├─────────────────────────┼──────────────────────────────┤
-│ 2. Policy Layer Gate    │ Bypassed by Admin Role       │
-│    - $user->can(...)    │ Gate::before returns true    │
-│    - Project membership │ Used for standard authorization│
-└─────────────────────────┴──────────────────────────────┘
+[Incoming Request]
+       │
+       ▼
+[SecurityHeadersMiddleware] ──► Inject CSP, HSTS, XFO, XXSS, Referrer-Policy
+       │
+       ▼
+[Sanctum Stateful / Bearer] ──► Validate HttpOnly Session Cookie or Bearer Token
+       │
+       ▼
+[TenantScopeMiddleware]     ──► Validate X-Organization-Id, Set Spatie Teams ID
+       │
+       ▼
+[Module Controller & FormRequest] ──► Schema validation & Service Layer execution
 ```
 
-1. **Anti-Self-Approval Review Guard**:
-   In `ReviewWorkflowService::approveReview()`:
-   ```php
-   $isOwner = $task->primary_owner_id === $reviewer->id;
-   $isSubmitter = $task->submitted_by_id === $reviewer->id;
-   $isContributor = $task->effortAllocations()->where('user_id', $reviewer->id)->exists();
+- **`SecurityHeadersMiddleware`**:
+  - `Content-Security-Policy`: Restricts scripts, objects, and framing to secure origins.
+  - `Strict-Transport-Security`: Enforces HTTPS for 1 year (`max-age=31536000; includeSubDomains; preload`).
+  - `X-Content-Type-Options`: `nosniff`.
+  - `X-Frame-Options`: `DENY` (prevents clickjacking).
+  - `Referrer-Policy`: `strict-origin-when-cross-origin`.
+- **`AuditLoggerService`**:
+  - Records every mutating action with actor ULID, organization ULID, target model, before/after diffs, client IP, and user-agent.
+  - Implements **SHA-256 Hash Chaining**: Each audit entry stores the cryptographic hash of the previous record, ensuring tamper-evident forensics.
 
-   if (($isOwner || $isSubmitter || $isContributor) && !$reviewer->hasRole('admin')) {
-       throw ValidationException::withMessages([
-           'reviewer' => ['Governance Violation: The task submitter, primary owner, and contributing members cannot approve their own deliverable review.'],
-       ]);
-   }
-   ```
-2. **Self-Deletion Guard**:
-   In `UserService::deleteUser()`:
-   ```php
-   if ($target->id === $actor->id) {
-       throw ValidationException::withMessages([
-           'user' => ['You cannot delete your own account.'],
-       ]);
-   }
-   ```
-3. **Last Active Administrator Lock**:
-   In `UserService::ensureNotLastActiveAdmin()`:
-   ```php
-   $activeAdminCount = User::role('admin')
-       ->where('status', 'active')
-       ->where('id', '!=', $user->id)
-       ->count();
-   if ($activeAdminCount === 0) {
-       throw ValidationException::withMessages([
-           'user' => ['Cannot modify or delete the last active administrator in the system.'],
-       ]);
-   }
-   ```
+---
+
+## 6. Complete Database Schema & Migrations Overview
+
+The DeliverOps database schema consists of **51 migrations** establishing 34 production tables with `CHAR(26)` ULID primary keys:
+
+### Core Tables Summary:
+1. `organizations`: Multi-tenant organizations (id, name, slug, plan, default_calendar, created_at).
+2. `organization_users`: Pivot table for tenant membership, roles, and invitation status.
+3. `organization_invitations`: Pending invitations with secure tokens and expiry dates.
+4. `users`: Enterprise user accounts, ULID PK, hashed password, capacity, status, MFA fields.
+5. `personal_access_tokens`: Sanctum API tokens with expiration and token abilities.
+6. `permissions`, `roles`, `model_has_roles`, `role_has_permissions`: Spatie RBAC tables with ULID PKs and `team_id`.
+7. `projects`: Project records (id, organization_id, code, name, description, config JSON, target_launch_date).
+8. `tasks`: WBS deliverables (id, project_id, organization_id, parent_id, wbs_code, name, status, priority, dates, effort hours, float).
+9. `task_dependencies`: Predecessor/successor links (predecessor_id, successor_id, dependency_type, lag_days).
+10. `task_effort_allocations`: Multi-contributor effort breakdown (task_id, user_id, allocated_hours).
+11. `task_comments`, `comment_reactions`, `task_watchers`: Threaded collaboration feed and activity events.
+12. `project_risks`: Risk, Issue & Blocker register (id, project_id, severity, likelihood, status, mitigation_plan).
+13. `risk_task_blockers`: Pivot table linking active risks to frozen WBS tasks.
+14. `baseline_versions`: Point-in-time WBS snapshots capturing locked schedules.
+15. `timesheets`: Granular daily hours logged against WBS tasks with billing rates.
+16. `expenses`: Project-level expenditures, categories, multi-currency rates, and receipt attachments.
+17. `invoices`, `invoice_line_items`: SOW milestone and T&M client billing records.
+18. `automation_rules`: Event-driven trigger/action workflow definitions.
+19. `audit_logs`: Tamper-evident forensic log with SHA-256 hash chaining.
+20. `compliance_dsar_requests`, `legal_holds`: GDPR erasure/export and legal hold tracking.

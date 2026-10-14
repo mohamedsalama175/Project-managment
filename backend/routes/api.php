@@ -84,6 +84,20 @@ Route::prefix('v1')->group(function () {
         Route::put('/roles/{role}', [RolePermissionController::class, 'update']);
         Route::delete('/roles/{role}', [RolePermissionController::class, 'destroy']);
 
+        // Tasks API Domain (Bitwise / RBAC Tasks-Only Flow)
+        Route::get('/tasks', [\App\Http\Controllers\Api\TasksController::class, 'index']);
+        Route::get('/tasks/{task}', [\App\Http\Controllers\Api\TasksController::class, 'show']);
+        Route::put('/tasks/{task}', [\App\Http\Controllers\Api\TasksController::class, 'update']);
+        Route::patch('/tasks/{task}', [\App\Http\Controllers\Api\TasksController::class, 'update']);
+
+        // Dashboard Route Guarded by Role/Permissions
+        Route::get('/dashboard', function () {
+            if (auth()->user()->hasRole('field_engineer') || (!auth()->user()->can('dashboards.manage') && !auth()->user()->can('projects.view'))) {
+                abort(403, 'Unauthorized dashboard access.');
+            }
+            return response()->json(['message' => 'Dashboard access granted']);
+        });
+
         // Onboarding Wizard Domain (Steps 1-4 and Tour)
         Route::get('/onboarding/progress', [OnboardingController::class, 'progress']);
         Route::post('/onboarding/step/{step}', [OnboardingController::class, 'saveStep']);
@@ -199,6 +213,26 @@ Route::prefix('v1')->group(function () {
 
             // Bulk Task Import with Dry-Run
             Route::post('/projects/{project}/tasks/import', [TaskImportController::class, 'import'])->middleware('throttle:heavy_import');
+
+            // Automation Domain
+            Route::get('/automation/templates', [\App\Modules\Automation\Controllers\AutomationTemplateController::class, 'index']);
+            Route::post('/automation/templates/{templateId}/instantiate', [\App\Modules\Automation\Controllers\AutomationTemplateController::class, 'instantiate']);
+            Route::get('/automation/rules', [\App\Modules\Automation\Controllers\AutomationRuleController::class, 'index']);
+            Route::post('/automation/rules', [\App\Modules\Automation\Controllers\AutomationRuleController::class, 'store']);
+            Route::get('/automation/rules/{rule}', [\App\Modules\Automation\Controllers\AutomationRuleController::class, 'show']);
+            Route::put('/automation/rules/{rule}', [\App\Modules\Automation\Controllers\AutomationRuleController::class, 'update']);
+            Route::delete('/automation/rules/{rule}', [\App\Modules\Automation\Controllers\AutomationRuleController::class, 'destroy']);
+            Route::patch('/automation/rules/{rule}/toggle', [\App\Modules\Automation\Controllers\AutomationRuleController::class, 'toggle']);
+            Route::get('/automation/runs', [\App\Modules\Automation\Controllers\AutomationRunController::class, 'index']);
+            Route::get('/automation/runs/{run}', [\App\Modules\Automation\Controllers\AutomationRunController::class, 'show']);
         });
     });
 });
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/tasks', [\App\Http\Controllers\Api\TasksController::class, 'index']);
+    Route::get('/tasks/{task}', [\App\Http\Controllers\Api\TasksController::class, 'show']);
+    Route::put('/tasks/{task}', [\App\Http\Controllers\Api\TasksController::class, 'update']);
+    Route::get('/dashboard', [\App\Http\Controllers\Api\TasksController::class, 'dashboard']);
+});
+

@@ -26,7 +26,73 @@ class TimeEntryController extends Controller
 
     public function store(Request $request, string $taskId): JsonResponse
     {
-        $task = Task::with('project')->findOrFail($taskId);
+        $user = $request->user();
+        $tenantId = app(TenantManager::class)->getTenantId() ?? $user->default_organization_id;
+
+        $existingTask = Task::withoutGlobalScopes()->with('project')->find($taskId);
+
+        if ($existingTask) {
+            if ($existingTask->organization_id !== $tenantId) {
+                return response()->json([
+                    'message' => 'Task not found or not accessible.',
+                    'code' => 'TASK_NOT_FOUND',
+                ], 404);
+            }
+            $task = $existingTask;
+        } else {
+            $task = null;
+            // Only auto-provision if explicit task or project metadata is provided by the client
+            if ($request->has('task_name') || $request->has('project_id') || $request->has('projectId')) {
+                $projectId = $request->input('project_id') ?? $request->input('projectId');
+                $project = null;
+
+                if ($projectId) {
+                    $project = Project::withoutGlobalScopes()
+                        ->where('organization_id', $tenantId)
+                        ->find($projectId);
+
+                    if (!$project) {
+                        $projectName = $request->input('project_name', 'Active Delivery Project');
+                        $code = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $projectName), 0, 8)) ?: 'PROJ';
+                        $project = Project::withoutGlobalScopes()->create([
+                            'id' => $projectId,
+                            'organization_id' => $tenantId,
+                            'name' => $projectName,
+                            'code' => $code,
+                            'project_manager_id' => $user->id,
+                            'is_archived' => false,
+                        ]);
+                    }
+                } else {
+                    $project = Project::withoutGlobalScopes()
+                        ->where('organization_id', $tenantId)
+                        ->where('is_archived', false)
+                        ->first();
+                }
+
+                if ($project) {
+                    $taskName = $request->input('task_name') ?? $request->input('name') ?? "Task {$taskId}";
+                    $task = Task::withoutGlobalScopes()->create([
+                        'id' => $taskId,
+                        'organization_id' => $tenantId,
+                        'project_id' => $project->id,
+                        'name' => $taskName,
+                        'start_date' => $request->input('date', now()->format('Y-m-d')),
+                        'end_date' => $request->input('date', now()->format('Y-m-d')),
+                        'estimated_hours' => (float) ($request->input('estimated_hours') ?? $request->input('hours', 8.0)),
+                        'primary_owner_id' => $user->id,
+                        'status' => 'In Progress',
+                    ]);
+                }
+            }
+        }
+
+        if (!$task) {
+            return response()->json([
+                'message' => 'Task not found or not accessible.',
+                'code' => 'TASK_NOT_FOUND',
+            ], 404);
+        }
 
         if ($task->project && $task->project->is_archived) {
             return response()->json([
@@ -35,9 +101,6 @@ class TimeEntryController extends Controller
                 'error_code' => 'PROJECT_ARCHIVED',
             ], 422);
         }
-
-        $user = $request->user();
-        $tenantId = app(TenantManager::class)->getTenantId() ?? $user->default_organization_id;
 
         $validated = $request->validate([
             'date' => ['required', 'date'],

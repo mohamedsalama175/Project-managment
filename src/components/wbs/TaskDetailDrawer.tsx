@@ -38,7 +38,7 @@ import { ActivityFeed } from '../collaboration/ActivityFeed';
 import { TaskAttachmentsList } from '../attachments/TaskAttachmentsList';
 import { ClayButton } from '../common/ClayButton';
 import { EmptyState } from '../common/EmptyState';
-import { getTodayUTC, diffCalendarDays } from '../../utils/dateUtils';
+import { getTodayUTC, diffCalendarDays, calculateDuration } from '../../utils/dateUtils';
 import { isTaskEntirelyNonWorkingDays } from '../../utils/capacityUtils';
 import { AiSuggestionCard } from '../ai/AiSuggestionCard';
 import { aiApi, TaskEstimationResponse } from '../../api/ai';
@@ -163,14 +163,35 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   const comments = taskComments[task.id] || [];
   const taskAudits = auditLogs.filter((a) => a.taskId === task.id);
 
-  const primaryOwner = (teamMembers || []).find((m) => m.id === task.primaryOwnerId);
+  const effectivePrimaryOwnerId =
+    task.primaryOwnerId ||
+    (teamMembers || []).find(
+      (m) =>
+        m.name.toLowerCase() === task.assignee?.toLowerCase() ||
+        m.name.toLowerCase().includes(task.assignee?.toLowerCase() || '')
+    )?.id ||
+    '';
+
+  const primaryOwner = (teamMembers || []).find((m) => m.id === effectivePrimaryOwnerId);
   const reviewer = (teamMembers || []).find((m) => m.id === task.reviewerId);
   const isWeekendSchedule = project?.config?.weekendDays ? isTaskEntirelyNonWorkingDays(task, project.config.weekendDays) : false;
+
+  const workingDaysDuration = task.isMilestone
+    ? 0
+    : calculateDuration(
+        task.start,
+        task.end,
+        project?.config?.durationMode || 'exclude_weekends',
+        project?.config?.weekendDays || [0, 6]
+      );
 
   // Total allocated effort calculation
   const totalAllocated =
     (task.primaryOwnerHours || 0) +
     (task.contributorAllocations || []).reduce((sum, c) => sum + (c.allocatedHours || 0), 0);
+
+  const estimatedHours = task.estimatedHours ?? 0;
+  const assignedHours = totalAllocated;
 
   const unallocatedBalance =
     task.estimatedHours !== null && task.estimatedHours !== undefined
@@ -501,8 +522,16 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                     Primary Accountable Owner
                   </label>
                   <select
-                    value={task.primaryOwnerId || ''}
-                    onChange={(e) => reassignTask(task.id, e.target.value || null, 'Reassigned via Task Drawer')}
+                    value={effectivePrimaryOwnerId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const member = (teamMembers || []).find((m) => m.id === val);
+                      updateTask(task.id, {
+                        primaryOwnerId: val || null,
+                        assignee: member ? member.name : (val ? task.assignee : 'Unassigned'),
+                      });
+                      reassignTask(task.id, val || null, 'Reassigned via Task Drawer');
+                    }}
                     className="w-full text-xs font-semibold p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                   >
                     <option value="">Unassigned</option>
@@ -568,6 +597,20 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                         ? `⚠️ Exceeded by ${Math.abs(unallocatedBalance!)}h`
                         : `${unallocatedBalance}h unallocated`}
                     </span>
+                  </div>
+                )}
+
+                {/* Effort Overallocation Warning Chips (FIX B3) */}
+                {estimatedHours > 0 && estimatedHours < assignedHours && (
+                  <div className="flex flex-col gap-1 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                    <span className="text-amber-600 text-sm font-semibold">
+                      ⚠️ Over-allocated by {assignedHours - estimatedHours}h
+                    </span>
+                    {assignedHours > estimatedHours * 1.5 && (
+                      <span className="text-red-600 text-sm font-bold">
+                        🚨 Significant overallocation: +{((assignedHours / estimatedHours - 1) * 100).toFixed(0)}%
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -649,10 +692,101 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between pt-1 text-xs text-slate-500">
-                  <span>Duration: <strong className="text-slate-700 dark:text-slate-200">{diffCalendarDays(task.start, task.end) + 1} days</strong></span>
+                  <span>
+                    Duration: <strong className="text-slate-700 dark:text-slate-200">{workingDaysDuration} Working Days</strong>
+                    <span className="text-slate-400 text-[11px] ml-1.5 font-normal">
+                      ({diffCalendarDays(task.start, task.end) + 1} calendar days)
+                    </span>
+                  </span>
                   {task.baselineStart && (
                     <span>Baseline: {task.baselineStart} → {task.baselineEnd}</span>
                   )}
+                </div>
+              </div>
+
+              {/* Progress & Predecessors Section */}
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                    Progress & Predecessors
+                  </span>
+                  <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    {task.pct}% Complete
+                  </span>
+                </div>
+
+                {/* Progress Slider */}
+                <div>
+                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 mb-1.5 font-semibold">
+                    <span>Completion Rate</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{task.pct}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={task.pct}
+                    onChange={(e) => {
+                      const newPct = Number(e.target.value);
+                      updateTask(task.id, {
+                        pct: newPct,
+                        status: newPct === 100 ? 'Completed' : newPct > 0 ? 'In Progress' : 'Not Started',
+                      });
+                    }}
+                    className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono mt-1">
+                    <span>0%</span>
+                    <span>25%</span>
+                    <span>50%</span>
+                    <span>75%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+
+                {/* Predecessors Multi-Select */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                    Predecessor Dependencies
+                  </label>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {(project.tasks || [])
+                      .filter((t) => t.id !== task.id)
+                      .map((t) => {
+                        const isSelected = (task.dependsOn || []).includes(t.id);
+                        return (
+                          <label
+                            key={t.id}
+                            className={`flex items-center justify-between p-2 rounded-xl text-xs border cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-slate-900 dark:text-slate-100 font-semibold'
+                                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  const current = task.dependsOn || [];
+                                  const next = e.target.checked
+                                    ? [...current, t.id]
+                                    : current.filter((id) => id !== t.id);
+                                  updateTask(task.id, { dependsOn: next });
+                                }}
+                                className="rounded text-emerald-600 focus:ring-emerald-500 accent-emerald-600 w-3.5 h-3.5"
+                              />
+                              <span className="font-mono text-[10px] text-slate-400">#{t.order ?? t.id}</span>
+                              <span className="truncate">{t.name}</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 shrink-0 ml-2">
+                              {t.end}
+                            </span>
+                          </label>
+                        );
+                      })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -778,6 +912,25 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
               )}
             </div>
           )}
+        </div>
+
+        {/* Sticky Footer */}
+        <div className="sticky bottom-0 px-6 py-3.5 border-t border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md flex items-center justify-end gap-3 z-20">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 text-xs font-bold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Save Changes</span>
+          </button>
         </div>
 
         {/* Blocker Reason Mandatory Prompt Modal */}

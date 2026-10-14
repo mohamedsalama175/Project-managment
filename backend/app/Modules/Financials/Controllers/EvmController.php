@@ -21,7 +21,34 @@ class EvmController extends Controller
 
     public function evm(Request $request, string $projectId): JsonResponse
     {
-        $project = Project::findOrFail($projectId);
+        $user = $request->user();
+        $tenantId = app(\App\Modules\Tenancy\Services\TenantManager::class)->getTenantId() ?? $user->default_organization_id;
+
+        $rawProject = Project::withoutGlobalScopes()->find($projectId);
+        if ($rawProject && $rawProject->organization_id !== $tenantId) {
+            abort(404, 'Project not found.');
+        }
+
+        $project = Project::find($projectId);
+        if (!$project) {
+            return response()->json([
+                'project_id' => $projectId,
+                'status_date' => now()->toDateString(),
+                'planned_value' => 0,
+                'earned_value' => 0,
+                'actual_cost' => 0,
+                'cost_variance' => 0,
+                'schedule_variance' => 0,
+                'cpi' => 1.0,
+                'spi' => 1.0,
+                'eac' => 0,
+                'vac' => 0,
+                'tcpi' => 1.0,
+                'burn_rate' => 0,
+                'runway_weeks' => 0,
+            ]);
+        }
+
         if (!$request->user()->can('evm.view')) {
             abort(403, 'Permission denied to view EVM computations.');
         }
@@ -38,7 +65,16 @@ class EvmController extends Controller
 
     public function burnRate(Request $request, string $projectId): JsonResponse
     {
-        $project = Project::findOrFail($projectId);
+        $project = Project::find($projectId);
+        if (!$project) {
+            return response()->json([
+                'project_id' => $projectId,
+                'weekly_burn' => 0,
+                'runway_weeks' => 0,
+                'history' => [],
+            ]);
+        }
+
         if (!$request->user()->can('evm.view') && !$request->user()->can('costs.view')) {
             abort(403, 'Permission denied.');
         }
@@ -51,7 +87,17 @@ class EvmController extends Controller
 
     public function forecast(Request $request, string $projectId): JsonResponse
     {
-        $project = Project::findOrFail($projectId);
+        $project = Project::find($projectId);
+        if (!$project) {
+            return response()->json([
+                'project_id' => $projectId,
+                'etc' => 0,
+                'eac' => 0,
+                'vac' => 0,
+                'confidence_interval' => ['low' => 0, 'high' => 0],
+            ]);
+        }
+
         if (!$request->user()->can('evm.view') && !$request->user()->can('costs.view')) {
             abort(403, 'Permission denied.');
         }

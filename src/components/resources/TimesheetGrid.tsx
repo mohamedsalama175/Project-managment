@@ -60,6 +60,7 @@ interface QuickEditState {
   taskId: string;
   taskName: string;
   projectName: string;
+  projectId?: string;
   date: string;
   entryId?: string | null;
   hours: number;
@@ -189,6 +190,7 @@ export const TimesheetGrid: React.FC = () => {
       taskId: task.task_id,
       taskName: task.task_name,
       projectName: task.project_name || 'Project',
+      projectId: task.project_id,
       date,
       entryId: cell.entry_id,
       hours: cell.hours || 0,
@@ -228,6 +230,9 @@ export const TimesheetGrid: React.FC = () => {
           hours: roundedHours,
           description: editState.description,
           billable: editState.billable,
+          task_name: editState.taskName,
+          project_id: editState.projectId,
+          project_name: editState.projectName,
         });
       }
 
@@ -316,6 +321,7 @@ export const TimesheetGrid: React.FC = () => {
         taskId: targetTask.id,
         taskName: targetTask.name,
         projectName: targetProject?.name || 'Project',
+        projectId: targetProject?.id,
         date: gridData.start_date,
         hours: 1.0,
         description: '',

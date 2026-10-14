@@ -12,7 +12,7 @@ interface GanttChartProps {
   timelineStart: Date;
   totalDays: number;
   dayWidth: number;
-  rowHeight: number;
+  rowHeight?: number;
   weekendDays: number[];
   criticalTaskIds: Set<string>;
   highlightCritical: boolean;
@@ -20,6 +20,9 @@ interface GanttChartProps {
   hasLockedBaseline: boolean;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  hoveredTaskId?: string | null;
+  hoveredPredId?: string | null;
+  onRowHover?: (taskId: string | null) => void;
 }
 
 export const GanttChart: React.FC<GanttChartProps> = ({
@@ -27,7 +30,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   timelineStart,
   totalDays,
   dayWidth,
-  rowHeight,
+  rowHeight = 40,
   weekendDays,
   criticalTaskIds,
   highlightCritical,
@@ -35,6 +38,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   hasLockedBaseline,
   scrollRef,
   onScroll,
+  hoveredTaskId,
+  hoveredPredId,
+  onRowHover,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRef = scrollRef || containerRef;
@@ -68,11 +74,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     <div
       ref={activeRef}
       onScroll={onScroll}
-      className="relative flex-1 overflow-x-auto overflow-y-auto select-none bg-slate-50/50 dark:bg-[#131920]/60"
-      style={{ minHeight: '400px' }}
+      className="relative flex-1 h-full overflow-x-auto overflow-y-auto select-none bg-slate-50/50 dark:bg-[#131920]/60"
     >
       <div style={{ width: `${totalWidth}px` }} className="relative min-w-full">
-        {/* Sticky Timeline Header */}
+        {/* Two-Tier Sticky Timeline Header (48px high, aligns with table header) */}
         <TimelineHeader
           timelineStart={timelineStart}
           totalDays={totalDays}
@@ -81,41 +86,54 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           todayStr={todayStr}
         />
 
-        {/* Canvas Body with Vertical Grid Lines */}
+        {/* Canvas Body with Strict 40px Row Heights */}
         <div
           className="relative"
           style={{ height: `${Math.max(300, tasks.length * rowHeight)}px` }}
         >
-          {/* Background Grid Columns */}
+          {/* Background Grid Columns & Weekend Vertical Stripes */}
           <div className="absolute inset-0 flex pointer-events-none">
             {Array.from({ length: totalDays }).map((_, i) => {
               const d = new Date(timelineStart.getTime() + i * 86400000);
               const isWk = isWeekendDay(d, weekendDays);
+              const isToday = i === todayOffsetDays;
+
               return (
                 <div
                   key={i}
                   style={{ width: `${dayWidth}px` }}
-                  className={`h-full border-r border-slate-200/40 dark:border-slate-800/40 ${
-                    isWk ? 'bg-slate-200/25 dark:bg-slate-800/25' : ''
-                  }`}
+                  className={`h-full border-r border-slate-200/50 dark:border-slate-800/40 ${
+                    isWk ? 'bg-slate-100/60 dark:bg-slate-800/40' : ''
+                  } ${isToday ? 'bg-rose-500/5' : ''}`}
                 />
               );
             })}
           </div>
 
-          {/* Vertical "Today" Marker Line */}
+          {/* 2. High-Visibility 2px Solid Rose "Today" Marker Line */}
           {isTodayVisible && (
             <div
               style={{ left: `${todayLeft}px` }}
-              className="absolute top-0 bottom-0 w-[2px] bg-red-500 z-20 pointer-events-none shadow-[0_0_8px_rgba(239,68,68,0.7)]"
-            >
-              <div className="sticky top-14 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-black uppercase tracking-wider shadow-md pointer-events-auto">
-                Today
-              </div>
-            </div>
+              className="absolute top-0 bottom-0 w-[2px] bg-rose-500 z-20 pointer-events-none shadow-[0_0_8px_rgba(244,63,94,0.6)]"
+            />
           )}
 
-          {/* SVG Dependency Curves Overlay */}
+          {/* Horizontal Row Guides (Strict 40px rowHeight) with Cross-Pane Hover Highlight */}
+          <div className="absolute inset-0 pointer-events-none">
+            {tasks.map((task, idx) => (
+              <div
+                key={task.id}
+                style={{ top: `${idx * rowHeight}px`, height: `${rowHeight}px` }}
+                className={`absolute inset-x-0 border-b border-slate-200/50 dark:border-slate-800/50 transition-colors ${
+                  hoveredTaskId === task.id
+                    ? 'bg-emerald-50/50 dark:bg-emerald-950/20'
+                    : ''
+                }`}
+              />
+            ))}
+          </div>
+
+          {/* Orthogonal SVG Dependency Curves Overlay */}
           <DependencyCurves
             tasks={tasks}
             timelineStart={timelineStart}
@@ -123,15 +141,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             rowHeight={rowHeight}
             criticalTaskIds={criticalTaskIds}
             highlightCritical={highlightCritical}
+            hoveredTaskId={hoveredTaskId}
+            hoveredPredId={hoveredPredId}
           />
 
-          {/* Task Rows & Bars */}
+          {/* Deliverable Bars & Baseline Bars */}
           {tasks.length === 0 ? (
             <div className="flex items-center justify-center p-12">
               <EmptyState
-                compact
-                title="No Tasks to Visualize"
-                description="Schedule tasks in the Work Breakdown Structure to project them on the Gantt timeline."
+                title="Timeline Empty"
+                description="Add deliverables to see interactive timeline bars."
               />
             </div>
           ) : (
@@ -139,13 +158,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               <div
                 key={task.id}
                 style={{
-                  height: `${rowHeight}px`,
                   top: `${idx * rowHeight}px`,
+                  height: `${rowHeight}px`,
                 }}
-                className="absolute left-0 right-0 border-b border-slate-200/30 dark:border-slate-800/30 hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors"
+                onMouseEnter={() => onRowHover?.(task.id)}
+                onMouseLeave={() => onRowHover?.(null)}
+                className="absolute inset-x-0"
               >
-                {/* Baseline Ghost Bar */}
-                {hasLockedBaseline && (
+                {/* Optional Baseline Ghost Bar */}
+                {hasLockedBaseline && task.baselineStart && task.baselineEnd && (
                   <BaselineBar
                     task={task}
                     timelineStart={timelineStart}
@@ -153,9 +174,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   />
                 )}
 
-                {/* Main Interactive Gantt Bar */}
+                {/* Interactive Deliverable Gantt Bar */}
                 <GanttBar
                   task={task}
+                  allTasks={tasks}
                   timelineStart={timelineStart}
                   dayWidth={dayWidth}
                   rowHeight={rowHeight}
@@ -163,6 +185,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   highlightCritical={highlightCritical}
                   categories={categories}
                   todayStr={todayStr}
+                  isRowHovered={hoveredTaskId === task.id}
                 />
               </div>
             ))

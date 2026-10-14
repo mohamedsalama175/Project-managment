@@ -4,11 +4,12 @@ namespace App\Models;
 
 use App\Modules\Tenancy\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
 class TaskDependency extends Pivot
 {
-    use HasUlids, TenantScoped;
+    use HasFactory, HasUlids, TenantScoped;
 
     protected $table = 'task_dependencies';
     public $incrementing = false;

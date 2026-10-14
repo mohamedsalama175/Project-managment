@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Database,
   Mail,
+  Copy,
   Lock,
   Key,
   LogIn,
@@ -31,6 +32,7 @@ import {
   Award,
   Layers,
   Sliders,
+  TableProperties,
 } from 'lucide-react';
 import { TeamMember, UserRole, MemberAvailabilityStatus, Task } from '../types';
 import { useProjectStore } from '../stores/useProjectStore';
@@ -38,9 +40,9 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { apiClient, ApiUser, ApiRole } from '../api/client';
 import { ClayButton } from '../components/common/ClayButton';
 import { EmptyState } from '../components/common/EmptyState';
-import { RolesMatrixView } from '../components/rbac/RolesMatrixView';
 import { LoginModal } from '../components/auth/LoginModal';
 import { calculateMemberWorkload, getMemberTaskBreakdown } from '../utils/capacityUtils';
+import { UsersListView } from './users/UsersListView';
 
 // Phase 5 Resource Management Components
 import { TimeOffCalendar } from '../components/resources/TimeOffCalendar';
@@ -52,7 +54,19 @@ import { CrossProjectTimelineSlideout } from '../components/resources/CrossProje
 import { TimesheetGrid } from '../components/resources/TimesheetGrid';
 import { FloatingTimerWidget } from '../components/resources/FloatingTimerWidget';
 
-export const PeopleView: React.FC = () => {
+export type PeopleTab =
+  | 'directory'
+  | 'users'
+  | 'capacity'
+  | 'time_off'
+  | 'skills'
+  | 'timesheets';
+
+interface PeopleViewProps {
+  initialTab?: PeopleTab;
+}
+
+export const PeopleView: React.FC<PeopleViewProps> = ({ initialTab }) => {
   const {
     teamMembers,
     addTeamMember,
@@ -65,9 +79,14 @@ export const PeopleView: React.FC = () => {
   const { can, user: currentAuthUser, checkAuth } = useAuthStore();
 
   // Active Sub-Tab
-  const [activeTab, setActiveTab] = useState<
-    'directory' | 'capacity' | 'time_off' | 'skills' | 'timesheets' | 'rbac'
-  >('directory');
+  const [activeTab, setActiveTab] = useState<PeopleTab>(initialTab || 'directory');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   // Resource Management Modals & Slideouts
@@ -94,7 +113,6 @@ export const PeopleView: React.FC = () => {
   // Form State
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
-  const [formPassword, setFormPassword] = useState('');
   const [formJobTitle, setFormJobTitle] = useState('');
   const [formDepartment, setFormDepartment] = useState('');
   const [formSystemRole, setFormSystemRole] = useState<string>('contributor');
@@ -124,42 +142,7 @@ export const PeopleView: React.FC = () => {
       setAvailableRoles(rolesRes.data);
 
       if (usersRes.data && usersRes.data.length > 0) {
-        // Map backend users into local teamMembers
-        usersRes.data.forEach((u) => {
-          const mappedRole = (u.roles?.[0] as UserRole) || 'contributor';
-          const existing = teamMembers.find((m) => m.id === u.id || m.email === u.email);
-          if (existing) {
-            updateTeamMember(existing.id, {
-              name: u.name,
-              email: u.email,
-              phone: u.phone || undefined,
-              jobTitle: u.jobTitle || 'Team Member',
-              department: u.department || 'General',
-              skills: u.skills || [],
-              systemRole: mappedRole,
-              weeklyCapacityHours: u.weeklyCapacityHours || 40,
-              status: u.status || 'active',
-              color: u.color || '#10b981',
-              photoUrl: u.avatarUrl || undefined,
-              avatar: u.avatarUrl || undefined,
-            });
-          } else {
-            addTeamMember({
-              name: u.name,
-              email: u.email,
-              phone: u.phone || undefined,
-              jobTitle: u.jobTitle || 'Team Member',
-              department: u.department || 'General',
-              skills: u.skills || [],
-              systemRole: mappedRole,
-              weeklyCapacityHours: u.weeklyCapacityHours || 40,
-              status: u.status || 'active',
-              color: u.color || '#10b981',
-              photoUrl: u.avatarUrl || undefined,
-              avatar: u.avatarUrl || undefined,
-            });
-          }
-        });
+        useProjectStore.getState().syncTeamMembersFromBackend(usersRes.data);
       }
     } catch (err: any) {
       setBackendError(err?.message || 'Could not connect to Laravel API. Operating in local mode.');
@@ -192,29 +175,29 @@ export const PeopleView: React.FC = () => {
       const dataUrl = e.target?.result as string;
       const img = new Image();
       img.onload = () => {
-        const maxDim = 384;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round((h * maxDim) / w);
-            w = maxDim;
-          } else {
-            h = Math.round((w * maxDim) / h);
-            h = maxDim;
-          }
-        }
+        // High quality square center-crop for crisp, un-distorted 1:1 avatars
+        const minEdge = Math.min(img.width, img.height);
+        const sx = Math.round((img.width - minEdge) / 2);
+        // Slightly bias toward top for portrait headshots so hair/face are preserved
+        const sy = img.height > img.width
+          ? Math.max(0, Math.round((img.height - minEdge) * 0.2))
+          : Math.round((img.height - minEdge) / 2);
+
+        const targetDim = Math.min(minEdge, 384);
         const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = targetDim;
+        canvas.height = targetDim;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           setFormPhotoUrl(dataUrl);
           setIsProcessingPhoto(false);
           return;
         }
-        ctx.drawImage(img, 0, 0, w, h);
-        const compressed = canvas.toDataURL('image/jpeg', 0.88);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, sx, sy, minEdge, minEdge, 0, 0, targetDim, targetDim);
+        const compressed = canvas.toDataURL('image/jpeg', 0.9);
         setFormPhotoUrl(compressed);
         setIsProcessingPhoto(false);
       };
@@ -271,7 +254,6 @@ export const PeopleView: React.FC = () => {
     setEditingMember(null);
     setFormName('');
     setFormEmail('');
-    setFormPassword('');
     setFormJobTitle('');
     setFormDepartment('Engineering');
     setFormSystemRole('contributor');
@@ -289,7 +271,6 @@ export const PeopleView: React.FC = () => {
     setEditingMember(m);
     setFormName(m.name);
     setFormEmail(m.email || '');
-    setFormPassword('');
     setFormJobTitle(m.jobTitle);
     setFormDepartment(m.department);
     setFormSystemRole(m.systemRole);
@@ -340,7 +321,7 @@ export const PeopleView: React.FC = () => {
             status: formStatus,
             skills: skillsArray,
             roles: [formSystemRole],
-            ...(formPassword ? { password: formPassword } : {}),
+            avatarUrl: formPhotoUrl.trim() || undefined,
           });
         } catch (apiErr: any) {
           console.warn('API update warning:', apiErr?.message);
@@ -368,7 +349,7 @@ export const PeopleView: React.FC = () => {
           const res = await apiClient.createUser({
             name: formName.trim(),
             email: generatedEmail,
-            password: formPassword.trim() || 'Password123!',
+            password: 'Password123!',
             jobTitle: formJobTitle.trim(),
             department: formDepartment.trim() || 'General',
             weeklyCapacityHours: Math.max(0, Number(formCapacity)),
@@ -376,14 +357,19 @@ export const PeopleView: React.FC = () => {
             skills: skillsArray,
             roles: [formSystemRole],
             color: '#10b981',
+            avatarUrl: formPhotoUrl.trim() || undefined,
           });
           createdId = res.data?.id;
         } catch (apiErr: any) {
-          console.warn('API create warning:', apiErr?.message);
+          console.error('API create error:', apiErr);
+          if (apiErr?.status === 422 || apiErr?.message?.includes('Validation') || apiErr?.message?.includes('roles')) {
+            throw new Error(apiErr.message || 'Validation failed on backend server.');
+          }
         }
 
         // Add to local store
         addTeamMember({
+          id: createdId,
           name: formName.trim(),
           email: generatedEmail,
           jobTitle: formJobTitle.trim(),
@@ -533,6 +519,18 @@ export const PeopleView: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('users')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'users'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <TableProperties className="w-4 h-4 text-sky-400" />
+            Users Management (Table & CSV)
+          </button>
+
+          <button
             onClick={() => setActiveTab('capacity')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
               activeTab === 'capacity'
@@ -578,21 +576,6 @@ export const PeopleView: React.FC = () => {
           >
             <Clock className="w-4 h-4" />
             Timesheets & Approvals
-          </button>
-
-          <button
-            onClick={() => setActiveTab('rbac')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'rbac'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            Roles & RBAC
-            <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px]">
-              Matrix
-            </span>
           </button>
         </div>
 
@@ -697,25 +680,47 @@ export const PeopleView: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredMembers.map((member) => {
                 const workload = calculateMemberWorkload(member, allTasks, activeProject?.config.weekendDays || []);
-                const breakdown = getMemberTaskBreakdown(member.id, allTasks, activeProject?.config.weekendDays || []);
+                const breakdown = getMemberTaskBreakdown(member.id, allTasks, activeProject?.config.weekendDays || [], member.name);
+
+                const formatTitle = (str?: string) => {
+                  if (!str) return '';
+                  return str
+                    .split(/\s+/)
+                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                    .join(' ');
+                };
 
                 return (
                   <div
                     key={member.id}
-                    className="clay-card !p-5 flex flex-col justify-between space-y-4 border border-slate-200/80 dark:border-slate-800/80 hover:shadow-lg transition-all group"
+                    className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 flex flex-col justify-between space-y-4 shadow-xs border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/40 transition-all group"
                   >
                     <div>
                       {/* Card Top: Avatar & Actions */}
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           {member.photoUrl || member.avatar ? (
-                            <img
-                              src={member.photoUrl || member.avatar}
-                              alt={member.name}
-                              className="w-12 h-12 rounded-2xl object-cover ring-2 ring-emerald-500/20 shadow-md"
-                            />
+                            <div
+                              onClick={() => can('users.edit') && handleOpenEdit(member)}
+                              className={`w-12 h-12 min-w-[48px] min-h-[48px] shrink-0 aspect-square rounded-2xl overflow-hidden ring-2 ring-emerald-500/20 shadow-xs bg-slate-100 dark:bg-slate-800 ${
+                                can('users.edit') ? 'cursor-pointer hover:ring-emerald-500/50 hover:shadow-sm transition-all' : ''
+                              }`}
+                              title={can('users.edit') ? 'Click to edit member & photo' : member.name}
+                            >
+                              <img
+                                src={member.photoUrl || member.avatar}
+                                alt={member.name}
+                                className="w-full h-full object-cover object-center"
+                              />
+                            </div>
                           ) : (
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm flex items-center justify-center shadow-md">
+                            <div
+                              onClick={() => can('users.edit') && handleOpenEdit(member)}
+                              className={`w-12 h-12 min-w-[48px] min-h-[48px] shrink-0 aspect-square rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm flex items-center justify-center shadow-xs ${
+                                can('users.edit') ? 'cursor-pointer hover:brightness-105 transition-all' : ''
+                              }`}
+                              title={can('users.edit') ? 'Click to edit member & photo' : member.name}
+                            >
                               {member.name
                                 .split(' ')
                                 .map((p) => p[0])
@@ -725,16 +730,29 @@ export const PeopleView: React.FC = () => {
                             </div>
                           )}
 
-                          <div>
-                            <div className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
-                              {member.name}
+                          <div className="min-w-0">
+                            <div className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
+                              {formatTitle(member.name)}
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                              {member.jobTitle}
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">
+                              {formatTitle(member.jobTitle)}
                             </div>
                             {member.email && (
-                              <div className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">
-                                {member.email}
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5 group/email">
+                                <span className="truncate max-w-[150px]">{member.email}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(member.email || '');
+                                    setBackendSuccess(`Copied ${member.email} to clipboard.`);
+                                    setTimeout(() => setBackendSuccess(null), 2000);
+                                  }}
+                                  className="opacity-0 group-hover/email:opacity-100 p-0.5 hover:text-emerald-500 transition-opacity cursor-pointer shrink-0"
+                                  title="Copy email to clipboard"
+                                >
+                                  <Copy className="w-2.5 h-2.5" />
+                                </button>
                               </div>
                             )}
                           </div>
@@ -874,7 +892,14 @@ export const PeopleView: React.FC = () => {
         </div>
       )}
 
-        {/* TAB 2: CAPACITY & FORECASTING */}
+        {/* TAB 2: USERS MANAGEMENT & CSV TABLE */}
+        {activeTab === 'users' && (
+          <div className="rounded-3xl overflow-hidden border border-slate-200/80 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50">
+            <UsersListView />
+          </div>
+        )}
+
+        {/* TAB 3: CAPACITY & FORECASTING */}
         {activeTab === 'capacity' && (
           <div className="space-y-6">
             {/* Advisory Leveling Banner */}
@@ -939,9 +964,6 @@ export const PeopleView: React.FC = () => {
 
         {/* TAB 5: TIMESHEETS & APPROVALS */}
         {activeTab === 'timesheets' && <TimesheetGrid />}
-
-        {/* TAB 6: RBAC MATRIX VIEW */}
-        {activeTab === 'rbac' && <RolesMatrixView />}
       </div>
 
       {/* Add / Edit Member Modal */}
@@ -973,22 +995,25 @@ export const PeopleView: React.FC = () => {
                 </label>
                 <div className="flex items-center gap-4">
                   <div className="relative group shrink-0">
-                    {formPhotoUrl ? (
-                      <img
-                        src={formPhotoUrl}
-                        alt="Avatar Preview"
-                        className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/30 shadow-md"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400">
-                        <User className="w-6 h-6" />
-                      </div>
-                    )}
+                    <div className="w-16 h-16 min-w-[64px] min-h-[64px] shrink-0 aspect-square rounded-2xl overflow-hidden ring-2 ring-emerald-500/30 shadow-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                      {formPhotoUrl ? (
+                        <img
+                          src={formPhotoUrl}
+                          alt="Avatar Preview"
+                          className="w-full h-full object-cover object-center"
+                        />
+                      ) : (
+                        <div className="w-full h-full border-2 border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400">
+                          <User className="w-6 h-6" />
+                        </div>
+                      )}
+                    </div>
                     {formPhotoUrl && (
                       <button
                         type="button"
                         onClick={() => setFormPhotoUrl('')}
-                        className="absolute -top-1.5 -right-1.5 p-1 rounded-full bg-red-500 text-white shadow-md hover:bg-red-600"
+                        className="absolute -top-1.5 -right-1.5 p-1 rounded-full bg-red-500 text-white shadow-md hover:bg-red-600 transition-colors"
+                        title="Remove photo"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -1067,18 +1092,7 @@ export const PeopleView: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center justify-between">
-                  <span>Password {editingMember && '(Leave blank to retain current)'}</span>
-                </label>
-                <input
-                  type="password"
-                  placeholder={editingMember ? '••••••••' : 'Min 8 characters (default: Password123!)'}
-                  value={formPassword}
-                  onChange={(e) => setFormPassword(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                />
-              </div>
+
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

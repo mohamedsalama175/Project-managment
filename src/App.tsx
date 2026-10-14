@@ -8,11 +8,11 @@ import { ConfigView } from './views/ConfigView';
 import { DashboardView } from './views/DashboardView';
 import { PeopleView } from './views/PeopleView';
 import { FinancialsView } from './views/FinancialsView';
-import { IntegrationsView } from './views/IntegrationsView';
-import { AutomationView } from './views/AutomationView';
-import { ComplianceView } from './views/ComplianceView';
-import { StatusPageView } from './views/StatusPageView';
 import { InstallView } from './views/InstallView';
+import { SignInView } from './views/auth/SignInView';
+import { UsersListView } from './views/users/UsersListView';
+import { RolesListView } from './views/roles/RolesListView';
+import { CreateRoleView } from './views/roles/CreateRoleView';
 import { OfflineQueueBanner } from './components/pwa/OfflineQueueBanner';
 import { PwaInstallBanner } from './components/pwa/PwaInstallBanner';
 import { MobileBottomNav } from './components/layout/MobileBottomNav';
@@ -21,6 +21,11 @@ import { WeeklyReportModal } from './components/reports/WeeklyReportModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SampleDataBanner } from './components/common/SampleDataBanner';
 import { OnboardingWizardModal } from './components/onboarding/OnboardingWizardModal';
+
+if (typeof window !== 'undefined') {
+  (window as any).useAuthStore = useAuthStore;
+  (window as any).useProjectStore = useProjectStore;
+}
 
 export const App: React.FC = () => {
   const { activeView, theme, projects } = useProjectStore();
@@ -50,7 +55,7 @@ export const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Check onboarding progress when authenticated
+  // Check onboarding progress and sync backend users into DeliverOps store when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       apiClient
@@ -66,6 +71,15 @@ export const App: React.FC = () => {
         .catch(() => {
           // Ignore if guest or endpoint error
         });
+
+      apiClient
+        .getUsers()
+        .then((res) => {
+          if (res.data && res.data.length > 0) {
+            useProjectStore.getState().syncTeamMembersFromBackend(res.data);
+          }
+        })
+        .catch(() => {});
     }
   }, [isAuthenticated]);
 
@@ -115,6 +129,15 @@ export const App: React.FC = () => {
     );
   }
 
+  // Authentication Gateway: Only authenticated users can access the system
+  if (!isAuthenticated) {
+    return (
+      <ErrorBoundary>
+        <SignInView />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#eef2f5] dark:bg-[#11161b] text-slate-800 dark:text-slate-100 flex flex-col transition-colors selection:bg-emerald-500/20 selection:text-emerald-800 dark:selection:text-emerald-300">
@@ -132,12 +155,11 @@ export const App: React.FC = () => {
           {activeView === 'planner' && <PlannerView />}
           {activeView === 'team' && <PeopleView />}
           {activeView === 'financials' && <FinancialsView />}
-          {activeView === 'integrations' && <IntegrationsView />}
-          {activeView === 'automation' && <AutomationView />}
-          {activeView === 'compliance' && <ComplianceView />}
-          {activeView === 'status' && <StatusPageView />}
           {activeView === 'config' && <ConfigView />}
           {activeView === 'dashboard' && <DashboardView />}
+          {activeView === 'users' && <PeopleView initialTab="users" />}
+          {activeView === 'roles' && <RolesListView />}
+          {activeView === 'create-role' && <CreateRoleView />}
         </main>
 
         {/* PWA Home Screen Install Banner */}

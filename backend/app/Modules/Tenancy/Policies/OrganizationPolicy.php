@@ -14,6 +14,14 @@ class OrganizationPolicy
 
     public function update(User $user, Organization $organization): bool
     {
+        if (!$this->view($user, $organization)) {
+            return false;
+        }
+
+        if (function_exists('setPermissionsTeamId')) {
+            setPermissionsTeamId($organization->id);
+        }
+
         return $user->isOwnerOf($organization) || $user->hasRole('admin');
     }
 

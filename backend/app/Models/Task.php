@@ -20,6 +20,11 @@ class Task extends Model
 
     protected $guarded = [];
 
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        return $query->where($field ?? $this->getRouteKeyName(), $value);
+    }
+
     protected function casts(): array
     {
         return [
@@ -63,9 +68,32 @@ class Task extends Model
         $this->attributes['end_date'] = $value;
     }
 
+    public function getAssignedToAttribute(): ?string
+    {
+        return $this->attributes['assigned_to'] ?? $this->attributes['primary_owner_id'] ?? null;
+    }
+
+    public function setAssignedToAttribute($value): void
+    {
+        $this->attributes['assigned_to'] = $value;
+        if (empty($this->attributes['primary_owner_id'])) {
+            $this->attributes['primary_owner_id'] = $value;
+        }
+    }
+
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to')->withTrashed();
+    }
+
     protected static function booted(): void
     {
         static::creating(function (Task $task) {
+            if (empty($task->assigned_to) && !empty($task->primary_owner_id)) {
+                $task->assigned_to = $task->primary_owner_id;
+            } elseif (empty($task->primary_owner_id) && !empty($task->assigned_to)) {
+                $task->primary_owner_id = $task->assigned_to;
+            }
             if (empty($task->name) && !empty($task->title)) {
                 $task->name = $task->title;
             }

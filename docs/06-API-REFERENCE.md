@@ -1,24 +1,25 @@
-# 06. DeliverOps Complete REST API Reference (All 47 Endpoints)
+# 06. DeliverOps Complete REST API Reference
+
+> **Document ID:** `DOC-06-API-REFERENCE`  
+> **Status:** Production-Verified / Field-Tested  
+> **Version:** 2.2.0 (Laravel 12 REST API under `/api/v1/`)  
+> **Harmonized With:** 01-BUSINESS, 02-FEATURES, 05-BACKEND, 09-SECURITY, 12-OPENAPI
+
+---
 
 ## 1. Global API Standards & Conventions
 
 - **Base URL**: `http://127.0.0.1:8000/api/v1`
-- **Protocol**: HTTP/1.1 or HTTP/2 over TLS
-- **Data Exchange**: All request payloads and response bodies use strict `application/json; charset=UTF-8`.
-- **Primary Keys**: All IDs are 26-character time-sortable **ULIDs** (`CHAR(26)`).
+- **Protocol**: HTTP/1.1 or HTTP/2 over TLS (with `SecurityHeadersMiddleware`)
+- **Data Exchange**: Strict `application/json; charset=UTF-8`
+- **Primary Keys**: 26-character time-sortable **ULIDs** (`CHAR(26)`)
 - **Global Headers**:
   ```http
   Accept: application/json
   Content-Type: application/json
   Authorization: Bearer {sanctum_personal_access_token}
+  X-Organization-Id: {active_tenant_organization_ulid}
   ```
-- **Idempotency Header** (Used for `POST /projects/import`):
-  ```http
-  X-Idempotency-Key: {unique_client_generated_ulid_or_uuid}
-  ```
-  - **TTL**: 24 hours.
-  - **Scope**: User-scoped (`user_id` + `idempotency_key`).
-  - **Behavior**: If request payload hash matches, returns cached response with identical status code. If hash differs, returns `409 Conflict`.
 - **Standard Error Schema**:
   ```json
   {
@@ -32,317 +33,233 @@
 
 ---
 
-## 2. Complete Inventory of All 47 Endpoints
+## 2. Complete Inventory of Endpoints by Domain
 
-| # | HTTP Method | Path | Controller Action | Domain Module |
-| :-: | :--- | :--- | :--- | :--- |
-| **1** | `POST` | `/auth/login` | `AuthController@login` | Identity |
-| **2** | `POST` | `/auth/logout` | `AuthController@logout` | Identity |
-| **3** | `GET` | `/auth/me` | `AuthController@me` | Identity |
-| **4** | `POST` | `/auth/password/change` | `AuthController@changePassword` | Identity |
-| **5** | `GET` | `/users` | `UserController@index` | Identity |
-| **6** | `POST` | `/users` | `UserController@store` | Identity |
-| **7** | `GET` | `/users/{id}` | `UserController@show` | Identity |
-| **8** | `PUT` | `/users/{id}` | `UserController@update` | Identity |
-| **9** | `DELETE` | `/users/{id}` | `UserController@destroy` | Identity |
-| **10** | `GET` | `/permissions` | `RolePermissionController@permissionsList` | Identity |
-| **11** | `GET` | `/roles` | `RolePermissionController@index` | Identity |
-| **12** | `POST` | `/roles` | `RolePermissionController@store` | Identity |
-| **13** | `PUT` | `/roles/{id}` | `RolePermissionController@update` | Identity |
-| **14** | `DELETE` | `/roles/{id}` | `RolePermissionController@destroy` | Identity |
-| **15** | `GET` | `/projects` | `ProjectController@index` | Projects |
-| **16** | `POST` | `/projects` | `ProjectController@store` | Projects |
-| **17** | `GET` | `/projects/{id}` | `ProjectController@show` | Projects |
-| **18** | `PUT` | `/projects/{id}` | `ProjectController@update` | Projects |
-| **19** | `DELETE` | `/projects/{id}` | `ProjectController@destroy` | Projects |
-| **20** | `POST` | `/projects/{id}/restore` | `ProjectController@restore` | Projects |
-| **21** | `POST` | `/projects/{id}/members` | `ProjectController@addMember` | Projects |
-| **22** | `DELETE` | `/projects/{id}/members/{user_id}` | `ProjectController@removeMember` | Projects |
-| **23** | `GET` | `/projects/{id}/tasks` | `TaskController@index` | Tasks |
-| **24** | `POST` | `/projects/{id}/tasks` | `TaskController@store` | Tasks |
-| **25** | `GET` | `/projects/{id}/tasks/{taskId}` | `TaskController@show` | Tasks |
-| **26** | `PUT` | `/projects/{id}/tasks/{taskId}` | `TaskController@update` | Tasks |
-| **27** | `DELETE` | `/projects/{id}/tasks/{taskId}` | `TaskController@destroy` | Tasks |
-| **28** | `POST` | `/projects/{id}/tasks/reorder` | `TaskController@reorder` | Tasks |
-| **29** | `GET` | `/projects/{id}/critical-path` | `TaskController@criticalPath` | Tasks / Scheduling |
-| **30** | `GET` | `/projects/{id}/risks` | `ProjectRiskController@index` | Risks |
-| **31** | `POST` | `/projects/{id}/risks` | `ProjectRiskController@store` | Risks |
-| **32** | `GET` | `/projects/{id}/risks/{riskId}` | `ProjectRiskController@show` | Risks |
-| **33** | `PUT` | `/projects/{id}/risks/{riskId}` | `ProjectRiskController@update` | Risks |
-| **34** | `DELETE` | `/projects/{id}/risks/{riskId}` | `ProjectRiskController@destroy` | Risks |
-| **35** | `POST` | `/projects/{id}/baselines/lock` | `BaselineController@lock` | Baselines |
-| **36** | `POST` | `/projects/{id}/baselines/clear` | `BaselineController@clear` | Baselines |
-| **37** | `GET` | `/projects/{id}/baselines/variance` | `BaselineController@variance` | Baselines |
-| **38** | `POST` | `/projects/{id}/tasks/{taskId}/review/request` | `TaskReviewController@requestReview` | Collaboration |
-| **39** | `POST` | `/projects/{id}/tasks/{taskId}/review/approve` | `TaskReviewController@approve` | Collaboration |
-| **40** | `POST` | `/projects/{id}/tasks/{taskId}/review/reject` | `TaskReviewController@reject` | Collaboration |
-| **41** | `GET` | `/projects/{id}/tasks/{taskId}/comments` | `TaskCommentController@index` | Collaboration |
-| **42** | `POST` | `/projects/{id}/tasks/{taskId}/comments` | `TaskCommentController@store` | Collaboration |
-| **43** | `DELETE` | `/projects/{id}/tasks/{taskId}/comments/{commentId}`| `TaskCommentController@destroy`| Collaboration |
-| **44** | `GET` | `/projects/{id}/audit` | `AuditLogController@projectLogs` | Audit |
-| **45** | `GET` | `/audit/global` | `AuditLogController@globalLogs` | Audit |
-| **46** | `GET` | `/projects/{id}/export` | `ImportExportController@export` | Audit / Migration |
-| **47** | `POST` | `/projects/import` | `ImportExportController@import` | Audit / Migration |
+### 2.1 System & First-Run Setup Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/system/status` | System health, version, and installation status | Public |
+| `GET` | `/system/install/status` | Database & preflight checklist status | Public |
+| `POST` | `/system/install` | Provisions initial system organization & super admin | Throttled (Public) |
+
+#### `POST /system/install`
+- **Payload**:
+  ```json
+  {
+    "admin_name": "DeliverOps Super Admin",
+    "admin_email": "admin@bitwise-solutions.com",
+    "admin_password": "SecurePassword123!",
+    "admin_password_confirmation": "SecurePassword123!",
+    "company_name": "Bitwise Solutions"
+  }
+  ```
+- **Response (201 Created)**:
+  ```json
+  {
+    "message": "System installation completed successfully.",
+    "organization": { "id": "01HZX000000000000000000000", "name": "Bitwise Solutions" },
+    "user": { "id": "01HZX000000000000000000001", "email": "admin@bitwise-solutions.com" }
+  }
+  ```
 
 ---
 
-## 3. Detailed Specifications by Domain
-
-### 3.1 Authentication & Session Domain
+### 2.2 Authentication & Identity Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/auth/signup` | Register new organization & owner user | Public |
+| `POST` | `/auth/register` | Register new member within existing org | Public |
+| `POST` | `/auth/login` | Authenticate credentials (Sanctum SPA / Bearer) | Public (Throttled) |
+| `POST` | `/auth/mfa/challenge` | Complete 2FA challenge via TOTP or recovery code | Public |
+| `POST` | `/auth/logout` | Revoke active token / terminate session | Authenticated |
+| `POST` | `/auth/logout-all` | Revoke all active sessions across all devices | Authenticated |
+| `GET` | `/auth/me` | Fetch active user profile, tenant orgs & permissions | Authenticated |
+| `PUT` | `/auth/me` | Update name, phone, avatar, or job title | Authenticated |
+| `PUT` | `/auth/password` | Change user password | Authenticated |
+| `GET` | `/auth/sessions` | List active sessions, IP addresses, and user-agents | Authenticated |
+| `DELETE` | `/auth/sessions/{id}` | Revoke specific session | Authenticated |
+| `DELETE` | `/auth/sessions` | Revoke all other sessions | Authenticated |
+| `POST` | `/auth/mfa/setup` | Generate TOTP QR code & secret key | Authenticated |
+| `POST` | `/auth/mfa/confirm` | Confirm TOTP activation with code | Authenticated |
+| `POST` | `/auth/mfa/disable` | Disable 2FA on account | Authenticated |
 
 #### `POST /auth/login`
-- **Rate Limit**: 5 attempts per minute per email + IP (`AUTH_THROTTLED`).
-- **Request Body**:
+- **Payload**:
   ```json
   {
-    "email": "admin@deliverops.com",
-    "password": "AdminPassword2026!"
+    "email": "mohamed.salama@bitwise-solutions.com",
+    "password": "SecurePassword123!",
+    "remember": true
   }
   ```
 - **Response (200 OK)**:
   ```json
   {
-    "token": "8|MnzypdyUhPpvMGvs6CB3XmEH5X0U1NYj6YDYuraVa46a4e0c",
+    "token": "1|sanctum_personal_access_token_hash",
     "user": {
-      "id": "01m4rc2nbjem909ckfs3093xqy",
-      "name": "DeliverOps Super Admin",
-      "email": "admin@deliverops.com",
-      "jobTitle": "System Architect",
-      "department": "Executive",
-      "weeklyCapacityHours": 40.0,
-      "roles": ["admin"],
-      "primaryRole": "admin"
+      "id": "01HZX...",
+      "name": "Mohamed Salama",
+      "email": "mohamed.salama@bitwise-solutions.com",
+      "primaryRole": "admin",
+      "roles": ["admin"]
     },
-    "permissions": ["users.view", "users.create", "projects.view", "tasks.create"]
+    "currentOrganization": {
+      "id": "01HZX000000000000000000000",
+      "name": "Bitwise Solutions",
+      "plan": "enterprise"
+    },
+    "permissions": ["*"]
   }
   ```
-- **Errors**: `401 Unauthorized` (credentials mismatch), `403 Forbidden` (`ACCOUNT_INACTIVE`), `429 Too Many Requests` (`AUTH_THROTTLED`).
-
-#### `GET /auth/me`
-- **Response (200 OK)**: Returns authenticated user profile, permissions array, and active workload summary.
-
-#### `POST /auth/logout`
-- **Response (200 OK)**: `{"message": "Logged out successfully."}`
-
-#### `POST /auth/password/change`
-- **Request Body**: `current_password`, `new_password`, `new_password_confirmation`.
-- **Response (200 OK)**: `{"message": "Password updated successfully."}`
 
 ---
 
-### 3.2 Identity & Users Domain
+### 2.3 Multi-Tenancy & Organizations Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/organizations` | Create new tenant organization workspace | Authenticated |
+| `POST` | `/organizations/switch` | Switch active tenant workspace context | Authenticated |
+| `GET` | `/organizations/current` | Get active tenant profile & billing settings | Tenant Context |
+| `PUT` | `/organizations/current` | Update tenant name, logo, region, default calendar | Tenant Admin |
+| `GET` | `/organizations/current/members` | Roster of tenant organization members | Tenant Context |
+| `PUT` | `/organizations/current/members/{user}`| Update member role in active tenant | Tenant Admin |
+| `DELETE`| `/organizations/current/members/{user}`| Remove member from active tenant | Tenant Admin |
+| `GET` | `/organizations/invitations` | List pending tenant invitations | Tenant Admin |
+| `POST` | `/organizations/invitations` | Send invitation email to new team member | Tenant Admin |
+| `DELETE`| `/organizations/invitations/{id}` | Revoke pending invitation | Tenant Admin |
 
-#### `GET /users`
-- **Permission**: `users.view`
-- **Query Parameters**:
-  - `search` (string): Filters across name, email, department, job title.
-  - `department` (string): Exact department match.
-  - `status` (`active` | `on_leave` | `inactive`).
-  - `role` (string): Spatie role name.
-  - `page` (int, default: 1), `per_page` (int, default: 25).
-- **Response (200 OK)**: Paginated `UserResource` collection with pagination metadata.
+---
 
-#### `POST /users`
-- **Permission**: `users.create`
-- **Invariants**: Anti-escalation: non-admins cannot assign roles they do not hold.
-- **Request Body**:
+### 2.4 Users & RBAC Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/users` | Paginated users directory (search, department filters)| `users.view` |
+| `POST` | `/users` | Create user and assign organization roles | `users.create` |
+| `GET` | `/users/{id}` | View detailed user profile & allocated projects | `users.view` |
+| `PUT` | `/users/{id}` | Update user details, capacity, and role assignment | `users.edit` |
+| `DELETE`| `/users/{id}` | Soft-delete user account (Protected against self-delete)| `users.delete` |
+| `GET` | `/permissions` | List all 55+ platform permissions grouped by module | `roles.view` |
+| `GET` | `/roles` | List custom and system roles with user counts | `roles.view` |
+| `POST` | `/roles` | Create custom role with permissions matrix | `roles.create` |
+| `PUT` | `/roles/{role}` | Update custom role permissions (System roles protected) | `roles.edit` |
+| `DELETE`| `/roles/{role}` | Delete custom role (System roles protected) | `roles.delete` |
+
+---
+
+### 2.5 Projects Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/projects` | List projects (with search, pagination, status) | `projects.view` |
+| `POST` | `/projects` | Create blank project with calendar configuration | `projects.create` |
+| `GET` | `/projects/{id}` | Get project details, config, milestones, and stats | `projects.view` |
+| `PUT` | `/projects/{id}` | Update project metadata, description, target launch | `projects.edit` |
+| `DELETE`| `/projects/{id}` | Soft-archive project | `projects.delete` |
+| `POST` | `/projects/{id}/restore` | Restore soft-archived project | `projects.restore` |
+| `POST` | `/projects/{id}/members` | Assign team member to project roster | `projects.manage_roster` |
+| `DELETE`| `/projects/{id}/members/{user}` | Remove team member from project roster | `projects.manage_roster` |
+| `POST` | `/projects/{id}/save-as-template`| Save existing project as reusable template | `templates.create` |
+
+---
+
+### 2.6 Tasks, WBS Hierarchy & CPM Scheduling Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/projects/{project}/tasks` | Get all WBS tasks, dependencies, and rollups | `tasks.view` |
+| `POST` | `/projects/{project}/tasks` | Create deliverable in WBS hierarchy | `tasks.create` |
+| `GET` | `/projects/{project}/tasks/{task}`| Get task details, effort allocations, float metrics | `tasks.view` |
+| `PUT` | `/projects/{project}/tasks/{task}`| Update task name, dates, effort, status, category | `tasks.edit` |
+| `DELETE`| `/projects/{project}/tasks/{task}`| Delete task (cascades sub-tasks or unlinks) | `tasks.delete` |
+| `POST` | `/projects/{project}/tasks/reorder`| Update sibling WBS ordering index | `tasks.edit` |
+| `GET` | `/projects/{project}/critical-path`| Calculate & return critical path task IDs & total float| `scheduling.view` |
+
+#### `POST /projects/{project}/tasks`
+- **Payload**:
   ```json
   {
-    "name": "Samir Naguib",
-    "email": "samir.naguib@deliverops.local",
-    "password": "InitialPassword123!",
-    "job_title": "Field Integration Lead",
-    "department": "Engineering",
-    "weekly_capacity_hours": 40,
-    "status": "active",
-    "roles": ["project_manager"],
-    "skills": ["PLC", "SCADA", "Safety Systems"]
-  }
-  ```
-- **Response (201 Created)**: Created `UserResource`.
-
-#### `PUT /users/{id}`
-- **Permission**: `users.edit`
-- **Invariants**: Cannot deactivate or revoke admin role from the system's last active admin.
-- **Response (200 OK)**: Updated `UserResource`.
-
-#### `DELETE /users/{id}`
-- **Permission**: `users.delete`
-- **Invariants**:
-  1. Cannot self-delete (`HTTP 422`).
-  2. Cannot delete the last active administrator (`HTTP 422`).
-  3. Cannot delete if actively assigned as PM of non-archived projects (`HTTP 422`).
-- **Response (200 OK)**: `{"message": "User deleted successfully."}`
-
----
-
-### 3.3 Roles & Permissions Domain
-
-- `GET /permissions`: Returns grouped permissions matrix.
-- `GET /roles`: Lists all roles with assigned user counts.
-- `POST /roles`: Creates custom role (`name`, `display_name`, `description`, `permissions`).
-- `PUT /roles/{id}`: Updates custom role. System role names cannot be altered.
-- `DELETE /roles/{id}`: Deletes custom role. System roles (`is_system = true`) and roles with active assigned users return `HTTP 422`.
-
----
-
-### 3.4 Projects Domain
-
-#### `GET /projects`
-- **Permission**: `projects.view`
-- **Query Parameters**: `search`, `status` (`active` | `archived`), `page`, `per_page`.
-- **Response (200 OK)**: Returns paginated project collection.
-
-#### `POST /projects`
-- **Permission**: `projects.create`
-- **Request Body**:
-  ```json
-  {
-    "name": "Line 4 Automation Upgrade",
-    "code": "L4-AUTO",
-    "description": "Plant-wide line upgrade",
-    "project_manager_id": "01m4rc2nbjem909ckfs3093xqy",
-    "config": {
-      "weekendDays": [5, 6],
-      "holidays": ["2026-12-25"],
-      "durationMode": "working_days",
-      "targetLaunchDate": "2026-12-01",
-      "highlightCriticalPath": true
-    }
-  }
-  ```
-- **Response (201 Created)**: Created `ProjectResource`.
-
-#### `POST /projects/{id}/members`
-- **Permission**: `projects.edit`
-- **Request Body**: `{"user_id": "01m4rc39akbm1234ckfs3093xz", "role": "contributor"}`
-- **Response (200 OK)**: `{"message": "Member added to project successfully."}`
-
-#### `DELETE /projects/{id}/members/{user_id}`
-- **Permission**: `projects.edit`
-- **Invariants**: Cannot remove the active Project Manager without reassigning first.
-- **Response (200 OK)**: `{"message": "Member removed from project successfully."}`
-
----
-
-### 3.5 Tasks & Scheduling Domain
-
-#### `GET /projects/{id}/tasks`
-- **Permission**: `projects.view`
-- **Response (200 OK)**: Returns full ordered WBS tree with nested predecessors, successors, effort allocations, and primary owner resources.
-
-#### `POST /projects/{id}/tasks`
-- **Permission**: `tasks.create`
-- **Request Body**:
-  ```json
-  {
-    "name": "Mount Terminal Boxes",
-    "wbs_code": "1.2.1",
-    "parent_id": "01m4rfa0919238475628192834",
-    "start_date": "2026-10-15",
-    "end_date": "2026-10-18",
-    "primary_owner_id": "01m4rc2nbjem909ckfs3093xqy",
-    "category": "electrical",
-    "effort_allocations": [
-      {
-        "user_id": "01m4rc2nbjem909ckfs3093xqy",
-        "allocated_hours": 16.0
-      }
-    ]
-  }
-  ```
-- **Response (201 Created)**: Created `TaskResource`.
-
-#### `POST /projects/{id}/tasks/reorder`
-- **Permission**: `tasks.edit_details`
-- **Request Body**: `{"tasks": [{"id": "...", "order_index": 0}, {"id": "...", "order_index": 1}]}`
-- **Response (200 OK)**: `{"message": "Tasks reordered successfully."}`
-
-#### `GET /projects/{id}/critical-path`
-- **Permission**: `projects.view`
-- **Response (200 OK)**:
-  ```json
-  {
-    "critical_path_tasks": [
-      {
-        "id": "01m4rfa0919238475628192834",
-        "name": "Structural Platform Assembly",
-        "early_start": "2026-10-12",
-        "early_finish": "2026-10-15",
-        "late_start": "2026-10-12",
-        "late_finish": "2026-10-15",
-        "total_float": 0,
-        "is_critical": true
-      }
-    ],
-    "critical_tasks_count": 1
+    "name": "RS-232 Scale Protocol Driver",
+    "category": "Scale Integration",
+    "priority": "Urgent",
+    "start": "2026-10-15",
+    "end": "2026-10-22",
+    "estimated_hours": 16,
+    "primary_owner_id": "01HZX...",
+    "parent_id": null,
+    "is_milestone": false,
+    "depends_on": ["01HZX_PRED_ID"]
   }
   ```
 
 ---
 
-### 3.6 Risks & Blockers Domain
-
-- **Allowed Status Enum**: `open`, `mitigating`, `mitigated`, `resolved`, `closed`.
-- **Severity Scoring**: $\text{Likelihood (1..3)} \times \text{Impact (1..3)} \to \text{Score (1..9)}$:
-  - Low (1–2), Medium (3–4), High (5–6), Critical (7–9).
-- `POST /projects/{id}/risks`: Registers risk and immediately blocks specified tasks, storing pre-blocked status.
-- `PUT /projects/{id}/risks/{riskId}`: Updates risk. When status transitions to `mitigated`, `resolved`, or `closed`, linked tasks restore to pre-blocked status if no other active blockers remain.
-- `DELETE /projects/{id}/risks/{riskId}`: Removes risk and safely unblocks linked tasks.
-
----
-
-### 3.7 Baselines & Variance Domain
-
-- `POST /projects/{id}/baselines/lock`: Freezes task dates, increments version in `baseline_versions`, sets `has_locked_baseline = true`.
-- `POST /projects/{id}/baselines/clear`: Clears active baseline dates on tasks.
-- `GET /projects/{id}/baselines/variance`: Computes Start Variance ($SV$) and Finish Variance ($FV$) in working days.
+### 2.7 Risks, Issues & Blockers (RIB) Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/projects/{project}/risks` | List registered risks with severity & linked blockers | `risks.view` |
+| `POST` | `/projects/{project}/risks` | Log new risk/blocker and link to WBS tasks | `risks.create` |
+| `GET` | `/projects/{project}/risks/{risk}`| View risk details, root cause, mitigation plan | `risks.view` |
+| `PUT` | `/projects/{project}/risks/{risk}`| Update risk status, severity, impact, mitigation | `risks.edit` |
+| `DELETE`| `/projects/{project}/risks/{risk}`| Delete risk record (releases linked blocked tasks) | `risks.delete` |
 
 ---
 
-### 3.8 Collaboration & Reviews Domain
-
-#### `POST /projects/{id}/tasks/{taskId}/review/request`
-- **Permission**: `tasks.request_review`
-- **Request Body**: `{"reviewer_id": "01m4rc2nbjem909ckfs3093xqy", "note": "Calibration complete"}`
-- **Response (200 OK)**: Returns task in `In Review` status (`review_status = 'pending_review'`). Sets `submitted_by_id = actor.id`.
-
-#### `POST /projects/{id}/tasks/{taskId}/review/approve`
-- **Permission**: `tasks.approve_review`
-- **Invariants**: Returns `HTTP 422` if reviewer is:
-  1. The task submitter (`submitted_by_id`).
-  2. The primary owner (`primary_owner_id`).
-  3. Any contributing member in `task_effort_allocations`.
-- **Response (200 OK)**: Returns task in `Completed` status with `pct = 100` and `review_status = 'approved'`.
-
-#### `POST /projects/{id}/tasks/{taskId}/review/reject`
-- **Permission**: `tasks.approve_review`
-- **Request Body**:
-  ```json
-  {
-    "review_note": "Load cell terminal wiring must be re-soldered to pass inspection.",
-    "remaining_progress_pct": 85
-  }
-  ```
-- **Invariants**: Review note is mandatory. Progress percentage is capped at $\le 95\%$.
-- **Response (200 OK)**: Returns task in `In Progress` status with `review_status = 'changes_requested'`.
+### 2.8 Baselines & Variance Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/projects/{project}/baselines/lock` | Capture point-in-time WBS snapshot and lock baseline | `baselines.lock` |
+| `POST` | `/projects/{project}/baselines/clear`| Clear locked baseline | `baselines.clear` |
+| `GET` | `/projects/{project}/baselines/variance` | Compute net schedule drift days ($SV, FV$) | `baselines.view` |
 
 ---
 
-### 3.9 Task Comments Domain
-
-- `GET /projects/{id}/tasks/{taskId}/comments`: Lists chronological comments with author profiles.
-- `POST /projects/{id}/tasks/{taskId}/comments`: Creates comment (`{"content": "..."}`).
-- `DELETE /projects/{id}/tasks/{taskId}/comments/{commentId}`: Author or Admin can delete comment.
+### 2.9 Collaboration, Reviews & Attachments Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/projects/{project}/tasks/{task}/review/request` | Submit deliverable for sign-off review | `reviews.request` |
+| `POST` | `/projects/{project}/tasks/{task}/review/approve` | Approve deliverable (Anti-Self-Approval enforced) | `reviews.approve` |
+| `POST` | `/projects/{project}/tasks/{task}/review/reject` | Request changes with explanation note | `reviews.reject` |
+| `GET` | `/projects/{project}/tasks/{task}/comments` | Get threaded discussion feed | `comments.view` |
+| `POST` | `/projects/{project}/tasks/{task}/comments` | Post comment with mentions | `comments.create` |
+| `POST` | `/comments/{comment}/reactions` | Add emoji reaction to comment | `comments.create` |
+| `DELETE`| `/comments/{comment}/reactions/{emoji}` | Remove emoji reaction | `comments.delete` |
+| `GET` | `/projects/{project}/tasks/{task}/watchers` | List watchers subscribed to task | `tasks.view` |
+| `POST` | `/projects/{project}/tasks/{task}/watch` | Subscribe active user to task updates | Authenticated |
+| `DELETE`| `/projects/{project}/tasks/{task}/watch` | Unsubscribe active user from task updates | Authenticated |
+| `GET` | `/projects/{project}/tasks/{task}/attachments` | List uploaded deliverable attachments | `tasks.view` |
+| `POST` | `/projects/{project}/tasks/{task}/attachments` | Upload attachment (antivirus scanning verified) | `tasks.edit` |
+| `GET` | `/projects/{project}/tasks/{task}/attachments/{id}/download` | Secure download URL | `tasks.view` |
 
 ---
 
-### 3.10 Audit & Data Migration Domain
+### 2.10 Notifications & Preferences Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/notifications` | Paginated notification feed for active user | Authenticated |
+| `GET` | `/notifications/unread-count`| Real-time unread notifications count | Authenticated |
+| `PUT` | `/notifications/{notification}/read` | Mark specific notification as read | Authenticated |
+| `PUT` | `/notifications/read-all` | Mark all notifications as read | Authenticated |
+| `GET` | `/notification-preferences` | Get user email, in-app, webhook alert preferences | Authenticated |
+| `PUT` | `/notification-preferences` | Update delivery channels and quiet hours | Authenticated |
 
-- `GET /projects/{id}/audit`: Returns project audit events with before/after JSON diffs.
-- `GET /audit/global`: Admin-only global security audit log.
-- `GET /projects/{id}/export`: Exports complete project bundle (metadata, WBS, dependencies, risks, effort).
-- `POST /projects/import`:
-  - **Header**: `X-Idempotency-Key: {ulid_or_uuid}`
-  - **Transaction**: 5-pass topological resolution.
-  - **Response**: `HTTP 201 Created` on new import, `HTTP 200 OK` on cached idempotency hit.
+---
+
+### 2.11 Audit, Compliance & Forensics Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/projects/{project}/audit` | Filtered audit logs for specific project | `audit.view` |
+| `GET` | `/audit/global` | Global tenant audit trail | `audit.view_global` |
+| `GET` | `/projects/{project}/export` | Export project WBS, schedule, and risks as JSON/CSV | `projects.export` |
+| `POST` | `/projects/import` | 5-pass idempotent import with dry-run verification | `projects.import` |
+| `POST` | `/projects/{project}/tasks/import` | Bulk task import with column mapping validation | `tasks.import` |
+
+---
+
+### 2.12 Automation & Workflows Domain
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/automation/templates` | Library of pre-built workflow templates | `automation.view` |
+| `GET` | `/automation/rules` | Tenant active automation rules | `automation.view` |
+| `POST` | `/automation/rules` | Create automation rule (triggers, conditions, actions) | `automation.create` |
+| `PUT` | `/automation/rules/{rule}` | Update automation rule configuration | `automation.edit` |
+| `DELETE`| `/automation/rules/{rule}` | Delete automation rule | `automation.delete` |
+| `PATCH` | `/automation/rules/{rule}/toggle`| Enable / disable automation rule | `automation.edit` |
+| `GET` | `/automation/runs` | Execution audit log of triggered automation runs | `automation.view` |

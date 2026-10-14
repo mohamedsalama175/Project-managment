@@ -7,8 +7,6 @@ import {
   DollarSign,
   ShieldAlert,
   FileText,
-  Plug,
-  Zap,
 } from 'lucide-react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { ActiveView } from '../../types';
@@ -49,16 +47,6 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       view: 'config',
       label: 'Config',
       icon: <Settings className="w-5 h-5" />,
-    },
-    {
-      view: 'integrations',
-      label: 'Apps',
-      icon: <Plug className="w-5 h-5" />,
-    },
-    {
-      view: 'automation',
-      label: 'Auto',
-      icon: <Zap className="w-5 h-5" />,
     },
   ];
 

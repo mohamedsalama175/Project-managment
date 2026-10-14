@@ -1,25 +1,25 @@
 # 01. Business & Domain Architecture
 
 > **Document ID:** `DOC-01-BUSINESS-AND-DOMAIN`  
-> **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Harmonized With:** 05-BACKEND, 06-API, 07-FRONTEND, 12-OPENAPI, 13-ADR, 14-ERROR-CODES, 15-DATA-DICT
+> **Status:** Production-Verified / Field-Tested  
+> **Version:** 2.2.0 (Enterprise Multi-Tenant Release)  
+> **Harmonized With:** 02-FEATURES, 05-BACKEND, 06-API, 07-FRONTEND, 09-SECURITY, 12-OPENAPI
 
 ---
 
 ## 1. Executive Vision & Platform Mission
 
-**DeliverOps** is an enterprise project delivery, Critical Path Method (CPM) scheduling, and resource governance platform designed for complex engineering, industrial automation, and software integration projects.
+**DeliverOps** is a multi-tenant project delivery, Critical Path Method (CPM) scheduling, resource capacity balancing, and risk governance platform tailored for industrial automation, engineering, and software delivery enterprises.
 
-In traditional project management tools (e.g., Trello, Asana, Monday, Jira), Gantt charts are often cosmetic visualizations without mathematical rigor. Tasks are manually dragged, dependencies do not calculate true floats, critical delivery paths are hidden, and contributors mark their own work as "Done" without formal peer sign-off.
+In conventional project management tools (e.g., Jira, Asana, Monday, ClickUp), Gantt charts are merely cosmetic visualizations without mathematical rigor. Tasks are manually dragged, dependencies do not calculate true float margins, critical paths remain obscure, multi-tenant isolation is ad-hoc, and contributors frequently mark their own work as "Done" without independent quality gate verification.
 
-**DeliverOps solves this by coupling:**
-1. **Mathematically Strict Scheduling**: Critical Path Method (CPM) engine based on Directed Acyclic Graph (DAG) topological sorting and calendar-aware forward/backward passes.
-2. **Deterministic Governance**: Immutable project baselines (`baseline_versions`) to track true schedule drift ($SV$ and $FV$).
-3. **Formal Quality Gates**: A review state machine with strict anti-self-approval enforcement (`submitted_by_id`, `primary_owner_id`, `task_effort_allocations`).
-4. **Risk-Linked Execution**: Direct $M:N$ linkage between registered project risks (`project_risks`) and blocked WBS tasks via `risk_task_blockers`.
-5. **Resource Capacity Transparency**: Real-time weekly capacity leveling and multi-contributor effort allocations (`task_effort_allocations`).
-6. **Regulatory-Grade Traceability**: An immutable, non-cascading polymorphic audit trail capturing before/after deltas for all project entities (`audit_logs`).
+**DeliverOps solves this through six fundamental pillars:**
+1. **Mathematically Strict Scheduling**: Deterministic Critical Path Method (CPM) engine based on Directed Acyclic Graph (DAG) topological sorting and calendar-aware forward/backward passes.
+2. **Multi-Tenant Logical Isolation**: Strict organization-scoped workspaces (`organization_id` foreign keys) with multi-tenant Spatie Teams RBAC and zero cross-tenant leakage.
+3. **Formal Quality Gates & Anti-Self-Approval**: Immutable separation of duties blocking task authors, primary owners, and effort contributors from signing off on their own work.
+4. **First-Class Risk & Blocker Governance**: Direct $M:N$ linkage between registered project risks (`project_risks`) and frozen WBS tasks via `risk_task_blockers` with automated unblocking upon resolution.
+5. **Resource Capacity Transparency & Leveling**: Single-point accountability with multi-contributor effort allocations, real-time workload heatmaps, and heuristic leveling proposals.
+6. **Financial Governance & Audit Forensics**: Earned Value Management ($PV, EV, AC, SPI, CPI$), SOW milestone invoicing, and SHA-256 hash-chained forensic audit logs.
 
 ---
 
@@ -32,6 +32,10 @@ In traditional project management tools (e.g., Trello, Asana, Monday, Jira), Gan
 │ Cosmetic Gantt Charts │ Unchecked Self-Signoff │ Hidden Schedule Drift │
 │ Tasks dragged manually│ Engineers approve own  │ Deadlines move quietly│
 │ without float math.   │ buggy work to hit KPIs.│ without baseline lock.│
+├───────────────────────┼────────────────────────┼───────────────────────┤
+│ Cross-Tenant Leakage  │ Uncontrolled Overtime  │ Disconnected Finances │
+│ Loose workspaces lack │ Over-allocation hidden │ SOW budgets detached  │
+│ database foreign keys.│ until team burns out.  │ from actual task burn.│
 └───────────┬───────────┴───────────┬────────────┴───────────┬───────────┘
             │                       │                        │
             ▼                       ▼                        ▼
@@ -41,154 +45,142 @@ In traditional project management tools (e.g., Trello, Asana, Monday, Jira), Gan
 │ Deterministic CPM DAG │ Anti-Self-Approval Gate│ Immutable Baselines   │
 │ Kahn's algo computes  │ Owner/Author blocked;  │ Freezes planned dates │
 │ Early/Late dates & TF.│ requires peer sign-off.│ & calculates SV / FV. │
+├───────────────────────┼────────────────────────┼───────────────────────┤
+│ Multi-Tenant Scoping  │ Capacity Heatmaps      │ Earned Value Finance  │
+│ Foreign keys enforce  │ Weekly hours balanced  │ SOW milestones linked │
+│ isolation on queries. │ with leveling wizard.  │ to delivery sign-offs.│
 └───────────────────────┴────────────────────────┴───────────────────────┘
 ```
-
-### 2.1 Fragile Schedules vs. Deterministic CPM Engine
-- **Problem**: When a single task slips in conventional tools, project managers must manually adjust dozens of dependent tasks, frequently creating scheduling contradictions or circular dependencies.
-- **DeliverOps Solution**: Dependencies form a strict Directed Acyclic Graph (DAG). If a milestone slips, DeliverOps automatically recalculates Early Start, Early Finish, Late Start, Late Finish, and Total Float across every successor. Tasks on the critical path ($\text{Float} \le 0$) are highlighted in real time.
-
-### 2.2 Unchecked Completion vs. Anti-Self-Approval Review Workflows
-- **Problem**: Contributors mark complex integration tasks as "Completed" to satisfy deadlines without code reviews, functional test validation, or sign-off by a lead.
-- **DeliverOps Solution**: Tasks requiring sign-off transition into an `In Review` state (`review_status = 'pending_review'`). The system enforces an immutable rule: **a task cannot be approved by its submitter (`submitted_by_id`), primary owner (`primary_owner_id`), or allocated effort contributors (`task_effort_allocations`)**. A distinct designated reviewer or project manager must formally inspect the deliverable and either approve it or request changes with an explanatory note.
-
-### 2.3 Ghost Deadlines vs. Immutable Multi-Version Baselines
-- **Problem**: Deadlines continually slide to the right, masking chronic delivery delays until the client launch date is missed.
-- **DeliverOps Solution**: Project managers lock official named **Baseline Snapshots** in `baseline_versions` (e.g. `v1.0 Contractual Target`, `v2.0 Approved Change Order`). Start and end dates are frozen in `task_baselines`. As actual dates shift, DeliverOps computes exact **Start Variance ($SV$)**, **Finish Variance ($FV$)**, and **Duration Variance ($DV$)** in working or calendar days, instantly identifying schedule slippage.
-
-### 2.4 Blocker Opacity vs. First-Class Risk Governance
-- **Problem**: When tasks are delayed, teams write vague comments like "waiting for hardware", obscuring project-level risks from executives.
-- **DeliverOps Solution**: A task cannot enter a `Blocked` status without either an explicit block reason or a direct reference to one or more registered **Project Risks** via `risk_task_blockers`. A task unblocks automatically when all linked risks transition out of active states (`open`, `mitigating`) into resolved states (`mitigated`, `resolved`, `closed`).
-
-### 2.5 Capacity Over-Commitment vs. Weekly Workload Heatmaps
-- **Problem**: Cross-functional team members are assigned 80 hours of tasks across 4 different projects within the same week, leading to burn-out and missed deliverables.
-- **DeliverOps Solution**: Every team member maintains a contracted `weekly_capacity_hours`. Effort allocations distribute hours across assignees and weeks. The platform renders a real-time capacity heatmap highlighting balanced, near-capacity, and over-allocated engineers.
 
 ---
 
 ## 3. Domain Concepts & Terminology Glossary
 
-### 3.1 Work Breakdown Structure (WBS)
-- **Task Hierarchy**: Tasks are organized in a recursive tree structure (`parent_id`).
-- **Summary / Milestone / Leaf Tasks**: Leaf tasks represent concrete work deliverables. Parent tasks represent summary work packages whose progress is rolled up from child leaves weighted by allocated effort hours.
-- **Task Lifecycle Statuses**: `Not Started` $\to$ `In Progress` $\leftrightarrow$ `Blocked` $\to$ `In Review` $\to$ `Completed`.
-- **Review Workflow Statuses**: `none` $\to$ `pending_review` $\to$ `approved` | `changes_requested`.
-- **Linear Ordering (`order_index`)**: Sibling tasks are positioned deterministically via an integer `order_index` supporting seamless drag-and-drop resequencing.
+### 3.1 Multi-Tenancy & Workspaces
+- **Organization (`organizations`)**: The top-level tenant entity (e.g., `Bitwise Solutions`). All users, projects, tasks, baselines, and financial records belong strictly to an organization.
+- **Tenant Membership (`organization_users`)**: Users belong to one or more organizations with tenant-specific roles (`admin`, `project_manager`, `field_engineer`).
+- **Workspace Switching**: Users seamlessly switch active organizations; all API queries enforce `X-Organization-Id` scoping.
 
-### 3.2 Critical Path Method (CPM)
-- **Predecessor & Successor**: Dependencies are modelled as Finish-to-Start ($FS$), Start-to-Start ($SS$), or Finish-to-Finish ($FF$) relationships with configurable `lag_days`.
-- **Early Start ($ES$) & Early Finish ($EF$)**: The earliest possible dates a task can begin and complete based on its predecessors.
-- **Late Start ($LS$) & Late Finish ($LF$)**: The latest dates a task can start and finish without postponing the overall project completion deadline.
-- **Total Float ($TF$)**: The amount of time a task can be delayed without delaying the project completion date:
+### 3.2 Work Breakdown Structure (WBS)
+- **Hierarchical Work Packages**: Tasks form a tree via `parent_id` with WBS coding (`1.0`, `1.1`, `1.1.1`).
+- **Effort-Weighted Progress Rollups**: Summary parent tasks derive completion percentage automatically from child leaves weighted by allocated effort hours.
+- **Task Lifecycle Statuses**:
+  $$\text{Not Started} \longrightarrow \text{In Progress} \longleftrightarrow \text{Blocked} \longrightarrow \text{In Review} \longrightarrow \text{Completed}$$
+- **Single-Point Accountability**: Each deliverable defines exactly one **Primary Owner** (`primary_owner_id`) and hours, supplemented by a multi-contributor effort breakdown (`task_effort_allocations`).
+
+### 3.3 Critical Path Method (CPM)
+- **Dependencies**: Finish-to-Start ($FS$), Start-to-Start ($SS$), or Finish-to-Finish ($FF$) links with optional lead/lag days.
+- **Early Start ($ES$) & Early Finish ($EF$)**: Earliest possible dates based on predecessor network.
+- **Late Start ($LS$) & Late Finish ($LF$)**: Latest dates deliverable can execute without postponing project target date.
+- **Total Float ($TF$)**: Margin of permissible delay:
   $$TF = LS - ES = LF - EF$$
-- **Critical Path**: The continuous sequence of dependent tasks with $TF \le 0$. Any delay to a critical task directly pushes out the project delivery date.
+- **Critical Path**: Sequence of deliverables where $TF \le 0$. Any delay to these deliverables directly pushes back project delivery.
+- **Cycle Detection**: Kahn's topological sort validates the dependency network before committing schedule dates.
 
-### 3.3 Working Day Calendar Math
-- **Weekend Configurations**: Configurable per project (e.g., `[5, 6]` for Friday/Saturday in MENA regions, or `[0, 6]` for Sunday/Saturday in Western markets).
-- **Holidays**: Configurable ISO date register (`YYYY-MM-DD`).
-- **Duration Modes**:
-  - `working_days`: Tasks consume only scheduled working days.
-  - `calendar`: Tasks consume consecutive calendar days regardless of weekends or holidays.
+### 3.4 Working Calendar Engine
+- **Weekend Rest Days**: Configurable per project (e.g., `[5, 6]` for Friday/Saturday in MENA regions; `[0, 6]` for Sunday/Saturday in Western markets).
+- **Holidays Register**: ISO date array (`YYYY-MM-DD`) treated as non-working days during date arithmetic.
+- **Duration Modes**: `working_days` (skips weekends and registered holidays) vs. `calendar` (continuous days).
 
-### 3.4 Multi-Version Baseline & Variance Engine
-- **Baseline Versions (`baseline_versions`)**: Named, versioned snapshots capturing point-in-time WBS state.
-- **Start Variance ($SV$)**:
-  $$SV = \text{start\_date} - \text{baseline\_start\_date}$$
-- **Finish Variance ($FV$)**:
+### 3.5 Baselines & Schedule Drift
+- **Baseline Locking (`baseline_versions`)**: Named, immutable snapshot freezing WBS dates (`v1.0 Contractual Target`, `v2.0 Approved Change Order`).
+- **Schedule Drift / Finish Variance ($FV$)**:
   $$FV = \text{end\_date} - \text{baseline\_end\_date}$$
-  - $FV > 0$: The task is **slipping** past its promised delivery date.
-  - $FV < 0$: The task is **ahead of schedule**.
-  - $FV = 0$: The task is **on schedule**.
+  - $FV > 0$: Deliverable is **slipping** past promised delivery target.
+  - $FV < 0$: Deliverable is **ahead of schedule**.
+  - $FV = 0$: Deliverable is **on schedule**.
 
-### 3.5 Risk Register & Multi-Blocker Governance
-- **Severity Scoring**: Scored as $\text{Likelihood} \times \text{Impact}$ across low, medium, high, and critical tiers.
-- **Risk Status Lifecycle**: `open` $\to$ `mitigating` $\to$ `mitigated` $\to$ `resolved` $\to$ `closed`.
-- **Multi-Blocker Pivot (`risk_task_blockers`)**: An $M:N$ association linking multiple risks to multiple tasks. A task only unblocks when all linked active risks are resolved.
+### 3.6 Risk, Issue & Blocker (RIB) Governance
+- **Severity Matrix**: Scored as $\text{Likelihood} \times \text{Impact}$ across low, medium, high, and critical tiers.
+- **Risk Status Lifecycle**: $\text{open} \to \text{mitigating} \to \text{mitigated} \to \text{resolved} \to \text{closed}$.
+- **Multi-Blocker Linking (`risk_task_blockers`)**: An $M:N$ pivot table linking registered risks to WBS deliverables. Tasks cannot enter `Blocked` without an explicit reason or risk link. When all linked risks resolve, deliverables unblock automatically.
+
+### 3.7 Quality Review Gates (Anti-Self-Approval)
+- Once deliverable work is complete, the owner submits a review request (`status = 'In Review'`).
+- **Anti-Self-Approval Invariant**:
+  $$\text{CanApprove}(u, t) \iff \text{hasRole}(u, 'project\_manager') \land (u.\text{id} \neq t.\text{submitted\_by}) \land (u.\text{id} \neq t.\text{primary\_owner\_id}) \land (u.\text{id} \notin t.\text{contributor\_ids})$$
+- Approvals promote the task to `Completed`. Change requests roll status back to `In Progress` with mandatory feedback notes.
+
+### 3.8 Financial Governance & Earned Value
+- **Budget at Completion ($BAC$)**: Contractual baseline budget.
+- **Planned Value ($PV$)**: Budgeted cost of work scheduled to date.
+- **Earned Value ($EV$)**: Budgeted cost of work actually performed ($EV = \text{Progress} \times BAC$).
+- **Actual Cost ($AC$)**: Cumulative recorded labor costs and expenses.
+- **Schedule Performance Index ($SPI$)**: $SPI = \frac{EV}{PV}$ ($SPI < 1$ indicates project delay).
+- **Cost Performance Index ($CPI$)**: $CPI = \frac{EV}{AC}$ ($CPI < 1$ indicates cost overrun).
 
 ---
 
-## 4. User Personas & Role Matrix
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        USER PERSONAS & PRIVILEGES                      │
-├─────────────────────┬───────────────────┬──────────────────────────────┤
-│ Super Administrator │ Project Manager   │ Integration Contributor      │
-│ System configuration│ Schedule authoring│ Task execution, progress     │
-│ User/Role RBAC      │ Baseline locking  │ reporting, review submission │
-│ Global audit logs   │ Risk triage & PM  │ Discussion participation     │
-└─────────────────────┴───────────────────┴──────────────────────────────┘
-```
+## 4. User Personas & Permissions Matrix
 
 ### 4.1 Persona Profiles
 
-#### 1. DeliverOps Super Administrator (`admin`)
-- **Profile**: System Architect / IT Executive.
-- **Responsibilities**: Creates user accounts, assigns capacity, establishes department groupings, configures system roles, inspects global security audit trails.
-- **Invariants**: Cannot be deleted if they are the last active administrator; cannot self-delete.
+#### 1. Tenant Administrator (`admin`)
+- **Profile**: Managing Director / IT Delivery Head.
+- **Privileges**: Workspace configuration, user provisioning, role authoring, organization billing, global audit logs.
+- **Protection**: Cannot self-delete; cannot delete the organization's last administrator.
 
 #### 2. Project Manager (`project_manager`)
-- **Profile**: Lead Delivery Manager / Integration Lead.
-- **Responsibilities**: Creates projects, constructs WBS, establishes dependencies, executes CPM recalculations, locks baselines, registers project risks, reviews and signs off on deliverables.
-- **Key Privilege**: Full edit permissions over assigned projects, tasks, and baselines.
+- **Profile**: Lead Delivery Manager / Engagement Lead.
+- **Privileges**: Project authoring, WBS structuring, dependency linking, CPM scheduling, baseline locking, risk registration, quality sign-offs (on tasks not owned).
 
-#### 3. Integration Engineer / Contributor (`contributor`)
-- **Profile**: Hardware, Software, PLC, or Automation Engineer.
-- **Responsibilities**: Updates task progress percentages, provides technical notes, requests reviews upon deliverable readiness, participates in task comment threads.
-- **Boundary**: Cannot lock baselines; cannot approve deliverables they submitted, owned, or contributed to.
+#### 3. Field / Integration Engineer (`field_engineer` / `contributor`)
+- **Profile**: Automation Engineer, Backend Dev, Frontend Dev, PLC Specialist.
+- **Privileges**: Task progress reporting, technical notes, time logging, review submission.
+- **Restriction**: Cannot lock baselines; cannot approve own deliverables.
 
-#### 4. Quality Assurance / Viewer (`viewer`)
-- **Profile**: Executive Observer / Client Representative / Auditor.
-- **Responsibilities**: Read-only inspection of Gantt schedules, baseline variance, weekly reports, and risk exposure.
-- **Boundary**: Strict read-only access. Cannot mutate project state.
+#### 4. Executive Observer / Auditor (`viewer`)
+- **Profile**: Client Representative / External Auditor.
+- **Privileges**: Read-only access to Gantt charts, baseline variance, weekly reports, and risk exposure.
 
 ---
 
-### 4.2 Comprehensive System Permission Matrix
+### 4.2 Comprehensive 20-Module Permissions Matrix
 
-| Capability / Permission | Admin | Project Manager | Contributor | Viewer |
-| :--- | :---: | :---: | :---: | :---: |
-| `users.view` | ✅ | ✅ | ✅ | ✅ |
-| `users.create` | ✅ | ❌ | ❌ | ❌ |
-| `users.edit` | ✅ | ❌ | ❌ | ❌ |
-| `users.delete` | ✅ | ❌ | ❌ | ❌ |
-| `roles.view` | ✅ | ❌ | ❌ | ❌ |
-| `roles.manage` | ✅ | ❌ | ❌ | ❌ |
-| `projects.view` | ✅ | ✅ | ✅ | ✅ |
-| `projects.create` | ✅ | ✅ | ❌ | ❌ |
-| `projects.edit` | ✅ | ✅ | ❌ | ❌ |
-| `projects.archive` | ✅ | ✅ | ❌ | ❌ |
-| `projects.import` | ✅ | ✅ | ❌ | ❌ |
-| `tasks.create` | ✅ | ✅ | ❌ | ❌ |
-| `tasks.edit_details` | ✅ | ✅ | ❌ | ❌ |
-| `tasks.update_progress` | ✅ | ✅ | ✅ | ❌ |
-| `tasks.request_review` | ✅ | ✅ | ✅ | ❌ |
-| `tasks.approve_review` | ✅ | ✅ | ❌ | ❌ |
-| `tasks.delete` | ✅ | ✅ | ❌ | ❌ |
-| `baselines.lock` | ✅ | ✅ | ❌ | ❌ |
-| `risks.manage` | ✅ | ✅ | ❌ | ❌ |
-| `comments.create` | ✅ | ✅ | ✅ | ❌ |
-| `audit.view` | ✅ | ✅ | ❌ | ❌ |
-
----
-
-## 5. Master DeliverOps Documentation Suite Index
-
-| Document Identifier | Document Title | Primary Scope |
-| :--- | :--- | :--- |
-| **`01-BUSINESS-AND-DOMAIN.md`** | Business & Domain Architecture | Core problem statements, domain concepts, personas, RBAC matrix |
-| **`02-FEATURES-AND-PAGES.md`** | Features & Application Views | Screen-by-screen breakdown, UI components, interaction models |
-| **`03-CRUD-SPECIFICATIONS.md`** | CRUD Operations & Invariants | Granular entity create/read/update/delete state invariants |
-| **`04-USER-FLOWS-AND-SCENARIOS.md`**| User Flows & Delivery Scenarios | Step-by-step user journeys from project init to delivery sign-off |
-| **`05-BACKEND-ARCHITECTURE.md`** | Backend Modulith Architecture | Production MySQL 8.0 DDL (19 tables), CPM equations, services |
-| **`06-API-REFERENCE.md`** | Complete API Reference | All 47 REST endpoints, request/response schemas, error codes |
-| **`07-FRONTEND-ARCHITECTURE.md`** | Frontend Architecture Specification | React 18, Zustand, TanStack Query v5, virtualized SVG Gantt, a11y |
-| **`08-DEPLOYMENT-AND-OPERATIONS.md`**| Deployment & Operations | Docker Compose, zero-downtime CI/CD, Redis caching, DR runbooks |
-| **`09-SECURITY-AND-COMPLIANCE.md`** | Security & Compliance Specification | Sanctum tokens, Spatie RBAC, anti-self-approval, audit immutability |
-| **`10-TESTING-STRATEGY.md`** | Testing Strategy Specification | Pest/PHPUnit suites, Kahn's algorithm tests, Playwright E2E |
-| **`11-REPORTING-AND-ANALYTICS.md`** | Reporting & Analytics Specification | EVM formulas, Schedule Drift Gauge, FDI index, PDF/MD exporters |
-| **`12-OPENAPI-SPEC.yaml`** | OpenAPI 3.1.0 Contract Specification | Machine-readable API definition for all 47 endpoints |
-| **`13-ADR-LOG.md`** | Architecture Decision Records (ADRs) | ADR 001 through ADR 010 capturing critical design rationale |
-| **`14-ERROR-CODES.md`** | Standardized Machine Error Codes | Exhaustive machine error catalog with HTTP statuses |
-| **`15-DATA-DICTIONARY.md`** | Enterprise Data Dictionary | Detailed schema reference for all 19 database tables & attributes |
-| **`16-RUNBOOKS.md`** | Incident Response & SRE Runbooks | Practical operational runbooks for SRE and engineering teams |
+| Functional Module | Permission Identifier | Description | Admin | PM | Contributor | Viewer |
+| :--- | :--- | :--- | :---: | :---: | :---: | :---: |
+| **Identity & Users** | `users.view` | View user roster and profiles | ✅ | ✅ | ✅ | ✅ |
+| | `users.create` | Provision new user accounts | ✅ | ❌ | ❌ | ❌ |
+| | `users.edit` | Update user roles, capacity, details | ✅ | ❌ | ❌ | ❌ |
+| | `users.delete` | Soft-delete user accounts | ✅ | ❌ | ❌ | ❌ |
+| **Roles & RBAC** | `roles.view` | View custom and system roles | ✅ | ✅ | ❌ | ❌ |
+| | `roles.manage` | Create, edit, and delete custom roles | ✅ | ❌ | ❌ | ❌ |
+| **Tenancy** | `tenancy.manage` | Update organization profile & billing | ✅ | ❌ | ❌ | ❌ |
+| | `tenancy.invite` | Send organization invitations | ✅ | ❌ | ❌ | ❌ |
+| **Projects** | `projects.view` | View project details and summaries | ✅ | ✅ | ✅ | ✅ |
+| | `projects.create` | Create new projects | ✅ | ✅ | ❌ | ❌ |
+| | `projects.edit` | Update project metadata and config | ✅ | ✅ | ❌ | ❌ |
+| | `projects.archive`| Archive or restore projects | ✅ | ✅ | ❌ | ❌ |
+| | `projects.export` | Export project WBS to JSON/CSV | ✅ | ✅ | ✅ | ❌ |
+| | `projects.import` | Import project WBS from JSON/CSV | ✅ | ✅ | ❌ | ❌ |
+| **Tasks & WBS** | `tasks.view` | View WBS tasks and details | ✅ | ✅ | ✅ | ✅ |
+| | `tasks.create` | Create new deliverables in WBS | ✅ | ✅ | ❌ | ❌ |
+| | `tasks.edit` | Modify deliverable dates, owner, scope | ✅ | ✅ | ❌ | ❌ |
+| | `tasks.update_progress` | Update completion percentage | ✅ | ✅ | ✅ | ❌ |
+| | `tasks.delete` | Remove deliverables from WBS | ✅ | ✅ | ❌ | ❌ |
+| **Scheduling (CPM)**| `scheduling.view`| Inspect Critical Path and floats | ✅ | ✅ | ✅ | ✅ |
+| | `scheduling.recalculate`| Trigger CPM rescheduling engine | ✅ | ✅ | ❌ | ❌ |
+| **Baselines** | `baselines.view` | View baseline variance ($SV, FV$) | ✅ | ✅ | ✅ | ✅ |
+| | `baselines.lock` | Capture and lock official baseline | ✅ | ✅ | ❌ | ❌ |
+| | `baselines.clear`| Remove locked baseline | ✅ | ✅ | ❌ | ❌ |
+| **Quality Reviews** | `reviews.request`| Submit deliverable for sign-off | ✅ | ✅ | ✅ | ❌ |
+| | `reviews.approve`| Sign-off deliverable (Anti-Self-Approval)| ✅ | ✅ | ❌ | ❌ |
+| | `reviews.reject` | Request deliverable changes | ✅ | ✅ | ❌ | ❌ |
+| **Risks & Blockers**| `risks.view` | Inspect risk register and blockers | ✅ | ✅ | ✅ | ✅ |
+| | `risks.create` | Register new risk / issue | ✅ | ✅ | ❌ | ❌ |
+| | `risks.edit` | Update risk mitigation & resolve | ✅ | ✅ | ❌ | ❌ |
+| | `risks.delete` | Delete registered risk | ✅ | ✅ | ❌ | ❌ |
+| **Resources** | `resources.view` | View capacity matrix & heatmap | ✅ | ✅ | ✅ | ❌ |
+| | `resources.level`| Run heuristic resource leveling wizard | ✅ | ✅ | ❌ | ❌ |
+| | `timesheets.log` | Log personal hours worked | ✅ | ✅ | ✅ | ❌ |
+| | `timesheets.approve`| Approve team members' timesheets | ✅ | ✅ | ❌ | ❌ |
+| **Financials** | `financials.view`| Inspect EVM metrics, budgets, runway | ✅ | ✅ | ❌ | ❌ |
+| | `financials.manage`| Manage invoices, rate cards, expenses | ✅ | ❌ | ❌ | ❌ |
+| **Collaboration** | `comments.create`| Post threaded task comments | ✅ | ✅ | ✅ | ❌ |
+| | `attachments.upload`| Upload deliverable attachments | ✅ | ✅ | ✅ | ❌ |
+| **Compliance** | `compliance.view`| Inspect DSAR requests & legal holds | ✅ | ❌ | ❌ | ❌ |
+| | `compliance.manage`| Process GDPR export/erasure | ✅ | ❌ | ❌ | ❌ |
+| **Automation** | `automation.view`| View active automation rules | ✅ | ✅ | ❌ | ❌ |
+| | `automation.manage`| Create/edit automation triggers | ✅ | ❌ | ❌ | ❌ |
+| **Audit** | `audit.view` | Inspect forensic tamper-evident logs | ✅ | ✅ | ❌ | ❌ |
+| | `audit.view_global`| Inspect global organization audit trail| ✅ | ❌ | ❌ | ❌ |

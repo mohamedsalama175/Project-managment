@@ -4,8 +4,30 @@
  * Supports Laravel Sanctum stateful HttpOnly sessions, CSRF protection, and Tenant Scoping.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-const SANCTUM_BASE_URL = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+export function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && envUrl.startsWith('http')) {
+    return envUrl.replace(/\/+$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const { hostname, port } = window.location;
+    // When running locally on any dev/preview port other than 8000,
+    // connect directly to Laravel backend on 127.0.0.1:8000 to eliminate proxy 404s.
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port !== '8000') {
+      return `http://${hostname}:8000/api/v1`;
+    }
+  }
+
+  return envUrl || '/api/v1';
+}
+
+export function getSanctumBaseUrl(apiUrl: string): string {
+  return apiUrl.replace(/\/api\/v1\/?$/, '');
+}
+
+export const API_BASE_URL = getApiBaseUrl();
+export const SANCTUM_BASE_URL = getSanctumBaseUrl(API_BASE_URL);
 
 export interface ApiUser {
   id: string;
@@ -405,7 +427,8 @@ class ApiClient {
       await this.csrf();
     }
 
-    const url = `${API_BASE_URL}${endpoint}`;
+    const cleanEndpoint = endpoint.startsWith('/api/v1') ? endpoint.slice(7) : (endpoint.startsWith('/') ? endpoint : `/${endpoint}`);
+    const url = `${API_BASE_URL}${cleanEndpoint}`;
     const defaultHeaders = await this.getHeaders();
     const headers: Record<string, string> = {
       ...(defaultHeaders as Record<string, string>),
@@ -972,17 +995,36 @@ class ApiClient {
     password?: string;
     phone?: string | null;
     avatarUrl?: string | null;
+    avatar_path?: string | null;
     jobTitle?: string | null;
+    job_title?: string | null;
     department?: string | null;
     weeklyCapacityHours?: number;
+    weekly_capacity_hours?: number;
     status?: 'active' | 'on_leave' | 'inactive';
     color?: string;
     skills?: string[];
     roles?: string[];
   }): Promise<{ message: string; data: ApiUser }> {
+    const body: Record<string, any> = {
+      name: payload.name,
+      email: payload.email,
+      password: payload.password,
+      phone: payload.phone ?? null,
+      avatar_path: payload.avatar_path || payload.avatarUrl || null,
+      job_title: payload.job_title || payload.jobTitle || 'Team Member',
+      jobTitle: payload.jobTitle || payload.job_title || 'Team Member',
+      department: payload.department || 'General',
+      weekly_capacity_hours: payload.weekly_capacity_hours ?? payload.weeklyCapacityHours ?? 40,
+      weeklyCapacityHours: payload.weeklyCapacityHours ?? payload.weekly_capacity_hours ?? 40,
+      status: payload.status || 'active',
+      color: payload.color || '#10b981',
+      skills: payload.skills || [],
+      roles: payload.roles && payload.roles.length > 0 ? payload.roles : ['contributor'],
+    };
     return this.request<{ message: string; data: ApiUser }>('/users', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
   }
 
@@ -994,18 +1036,31 @@ class ApiClient {
       password?: string;
       phone?: string | null;
       avatarUrl?: string | null;
+      avatar_path?: string | null;
       jobTitle?: string | null;
+      job_title?: string | null;
       department?: string | null;
       weeklyCapacityHours?: number;
+      weekly_capacity_hours?: number;
       status?: 'active' | 'on_leave' | 'inactive';
       color?: string;
       skills?: string[];
       roles?: string[];
     }
   ): Promise<{ message: string; data: ApiUser }> {
+    const body: Record<string, any> = { ...payload };
+    if (payload.jobTitle !== undefined) {
+      body.job_title = payload.jobTitle;
+    }
+    if (payload.weeklyCapacityHours !== undefined) {
+      body.weekly_capacity_hours = payload.weeklyCapacityHours;
+    }
+    if (payload.avatarUrl !== undefined) {
+      body.avatar_path = payload.avatarUrl;
+    }
     return this.request<{ message: string; data: ApiUser }>(`/users/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
   }
 

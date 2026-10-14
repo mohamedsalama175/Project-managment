@@ -2,8 +2,9 @@
 
 > **Document ID:** `DOC-16-RUNBOOKS`  
 > **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Audience:** Site Reliability Engineers (SRE), DevOps, Support Engineers, Lead Architects
+> **Version:** 2.2.0  
+> **Audience:** Site Reliability Engineers (SRE), DevOps, Support Engineers, Lead Architects  
+> **Harmonized With:** [03-CRUD](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/03-CRUD-SPECIFICATIONS.md), [05-BACKEND](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/05-BACKEND-ARCHITECTURE.md), [06-API](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/06-API-REFERENCE.md), [08-DEPLOYMENT](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/08-DEPLOYMENT-AND-OPERATIONS.md), [09-SECURITY](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/09-SECURITY-AND-COMPLIANCE.md), [14-ERROR-CODES](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/docs/14-ERROR-CODES.md)
 
 ---
 
@@ -16,6 +17,9 @@
 - [RUNBOOK-05: Redis Queue Jam & Worker Deadlock Recovery](#runbook-05-redis-queue-jam--worker-deadlock-recovery)
 - [RUNBOOK-06: Forensic Audit Trail Verification & Tamper Inspection](#runbook-06-forensic-audit-trail-verification--tamper-inspection)
 - [RUNBOOK-07: Reconciliation of Stalled Tasks with Orphaned Blocker Links](#runbook-07-reconciliation-of-stalled-tasks-with-orphaned-blocker-links)
+- [RUNBOOK-08: User Account Lockout Unlock (`deliverops:unlock-user`)](#runbook-08-user-account-lockout-unlock-deliveropsunlock-user)
+- [RUNBOOK-09: Disaster Recovery Re-installation & Spatie Teams Sync](#runbook-09-disaster-recovery-re-installation--spatie-teams-sync)
+- [RUNBOOK-10: Cryptographic Audit Chain Integrity Verification](#runbook-10-cryptographic-audit-chain-integrity-verification)
 
 ---
 
@@ -248,3 +252,75 @@ This utility:
 1. Inspects all tasks in status `Blocked`.
 2. Evaluates the count of linked risks with status $\in \{\text{'open'}, \text{'mitigating'}\}$.
 3. If active count $= 0$, automatically parses the pre-blocked state from `block_reason` (e.g. `In Progress` vs `Not Started`), clears `block_reason`, restores the previous status, and records an unblock event in `audit_logs`.
+
+---
+
+## RUNBOOK-08: User Account Lockout Unlock (`deliverops:unlock-user`)
+
+### 1. Symptoms & Alert Triggers
+- User reports inability to log in with message: `"Account locked due to consecutive failed attempts"` (HTTP 423 `AUTH_ACCOUNT_LOCKED`).
+- Multiple failed login entries recorded in `audit_logs` with event `auth.login_failed`.
+
+### 2. Root Cause Analysis
+The user exceeded 5 consecutive invalid password attempts within a 15-minute window, causing the security subsystem to set `locked_until = Carbon::now()->addMinutes(15)` and log a security lockout event.
+
+### 3. Remediation Procedure
+Execute the administrative unlock command:
+```bash
+php artisan deliverops:unlock-user {email}
+```
+This utility:
+1. Locates user by email in active tenant.
+2. Clears `locked_until` and resets `failed_login_attempts = 0`.
+3. Records an administrative `auth.account_unlocked` entry into `audit_logs`.
+4. Prompts user to initiate a password reset if credentials were forgotten.
+
+---
+
+## RUNBOOK-09: Disaster Recovery Re-installation & Spatie Teams Sync
+
+### 1. Symptoms & Alert Triggers
+- Fresh staging, disaster recovery, or cold replica environment needs initialization.
+- Log error: `"Table 'deliverops.organizations' doesn't exist"` or `"Spatie team context not set"`.
+
+### 2. Remediation Procedure
+1. Verify database credentials in `.env` or container environment variables.
+2. Ensure Spatie Teams multi-tenancy configuration is active:
+   ```bash
+   php artisan deliverops:prepare-spatie-teams
+   ```
+3. Run the automated platform installer:
+   ```bash
+   php artisan deliverops:install --force
+   ```
+4. Confirm health check status:
+   ```bash
+   curl -s http://127.0.0.1:8000/api/v1/system/health | jq .
+   ```
+
+---
+
+## RUNBOOK-10: Cryptographic Audit Chain Integrity Verification
+
+### 1. Symptoms & Alert Triggers
+- SOC 2 Type II or regulatory compliance audit request.
+- Automated security telemetry flags a discrepancy in `audit_logs.hash`.
+
+### 2. Diagnostic & Verification Procedure
+Run the cryptographic verification routine via API:
+```bash
+curl -X GET "https://api.deliverops.internal/api/v1/audit/verify-chain" \
+  -H "Authorization: Bearer $SECURITY_ADMIN_TOKEN" \
+  -H "X-Organization-Id: $ORG_ID"
+```
+
+**Verification Algorithm**:
+1. Iterates from genesis block (`prev_hash = '0000000000000000000000000000000000000000000000000000000000000000'`).
+2. For each audit log entry $n$, recomputes:
+   $$\text{Expected Hash} = \text{SHA-256}(\text{prev\_hash}_{n-1} + \text{Payload}_n)$$
+3. If `Expected Hash` $\neq$ `Stored Hash`:
+   - Verification halts immediately.
+   - Returns compromised block ID, timestamp, and tampered fields.
+4. If all hashes match:
+   - Returns `{ "status": "VERIFIED", "total_blocks_checked": N, "chain_valid": true }`.
+

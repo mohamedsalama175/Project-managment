@@ -1,441 +1,193 @@
-# DeliverOps Frontend Architecture Specification
+# 07. DeliverOps Frontend Architecture Specification
 
 > **Document ID:** `DOC-07-FRONTEND-ARCHITECTURE`  
-> **Status:** Production-Ready / Implementation-Grade  
-> **Version:** 2.0.0  
-> **Target Platform:** React 18, TypeScript 5.4+, Vite 5+, Zustand, TanStack Query v5, IndexedDB (Dexie/Native)
+> **Status:** Production-Verified / Field-Tested  
+> **Version:** 2.2.0 (CLAYGANTT Modern Enterprise Release)  
+> **Target Platform:** React 19, TypeScript, Tailwind CSS, Vite, Zustand 5, IndexedDB (`ClayGanttDB`)  
+> **Harmonized With:** 01-BUSINESS, 02-FEATURES, 05-BACKEND, 06-API, 12-OPENAPI
 
 ---
 
 ## 1. Architectural Overview & System Design
 
-DeliverOps utilizes a modern, resilient Single-Page Application (SPA) architecture built on **React 18** and **TypeScript** (strict mode), bundled via **Vite**. The frontend client operates as a reactive execution surface for project delivery workflows, resource capacity balancing, real-time WBS editing, and SVG-based Critical Path Method (CPM) Gantt scheduling.
+DeliverOps utilizes a modern, resilient Single-Page Application (SPA) architecture built on **React 19** and **TypeScript** (strict mode), bundled via **Vite**. The frontend client operates as a reactive execution surface for project delivery workflows, resource capacity balancing, real-time WBS editing, and SVG-based Critical Path Method (CPM) Gantt scheduling known as **CLAYGANTT**.
 
 ```mermaid
 graph TD
-    subgraph Client ["Client Browser Runtime (React 18 + Vite)"]
-        UI["UI Layer<br/>(PlannerView, DashboardView, PeopleView, ConfigView)"]
-        Zustand["Zustand Client Store<br/>(UI State, Active Selection, Dirty Buffers)"]
-        Query["TanStack Query v5<br/>(Server State Cache & Optimistic Mutations)"]
-        Dexie["IndexedDB Offline Engine<br/>(ClayGanttDB: Projects, Drafts, Audit Logs)"]
-        GanttEngine["SVG Virtualized Gantt Engine<br/>(1,000+ Tasks, Bezier Links, Snapping)"]
-        SSE["SSE / WebSocket Consumer<br/>(Real-Time Invalidation & Rebase)"]
+    subgraph Client ["Client Browser Runtime (React 19 + Vite)"]
+        Navbar["Consolidated Navbar (h-12)<br/>Brand, Project Switcher, Progress Pill, View Tabs, Status, Theme"]
+        Toolbar["Planner Toolbar (h-11)<br/>+ Add Deliverable, Filters, Zoom, Badges, Presets, Resource Chips"]
+        SplitPane["Split-Pane Container (46% Left WBS / 54% Right Gantt)<br/>6px Interactive Drag Handle (Double-Click Reset)"]
+        WBSTable["WBS Data Grid (Strict 40px Rows)<br/>View at Rest, Edit on Focus, 10 Columns, SVG Progress Rings"]
+        GanttCanvas["Virtualized SVG Gantt Canvas<br/>Two-Tier Header, Today Marker, Sticky Labels, Bezier Curves, Hover Card"]
+        Zustand["Zustand 5 State Stores<br/>useProjectStore & useAuthStore (LocalStorage & IndexedDB Sync)"]
+        ApiClient["Enterprise API Client<br/>Sanctum Stateful / Bearer Tokens, Tenant Headers, Offline Queue"]
     end
 
-    subgraph Backend ["Laravel 12 API Gateway"]
-        API["REST Endpoints (/api/v1/projects/*)"]
-        CPM["CPM Engine (/projects/{id}/schedule/cpm)"]
-        Broadcaster["Event Streamer (SSE / Redis WebSockets)"]
+    subgraph Backend ["Laravel 12 API Gateway (/api/v1)"]
+        API["REST Endpoints (20 Modules)"]
+        Sanctum["Laravel Sanctum (Session / Token Auth)"]
     end
 
-    UI --> Zustand
-    UI --> GanttEngine
-    UI --> Query
-    Query <--> API
-    Query <--> CPM
-    SSE <--> Broadcaster
-    SSE --> Query
-    Zustand <--> Dexie
-    Query --> Dexie
-```
-
-### 1.1 Directory Structure & Monolith Organization
-The frontend source code is organized into modular domain features located under `src/`:
-
-```
-src/
-├── api/                     # Typed Axios / Fetch HTTP clients & endpoint contracts
-│   ├── client.ts            # Base Axios instance with Sanctum bearer token & 401 interceptors
-│   ├── projects.ts          # Project CRUD & baseline endpoints
-│   ├── tasks.ts             # Task CRUD, review decisions, and effort allocations
-│   ├── cpm.ts               # CPM calculation trigger & schedule metrics
-│   └── risks.ts             # Risk register & task blocker endpoints
-├── assets/                  # Static SVGs, icons, typography font files
-├── components/              # Modular UI components partitioned by domain
-│   ├── auth/                # Login modal, MFA challenge, user profile flyout
-│   ├── common/              # Buttons, inputs, modals, toast alerts, status badges
-│   ├── gantt/               # Virtualized SVG canvas, dependency lines, milestone diamonds
-│   ├── layout/              # AppShell, TopNav, Sidebar, WorkspaceTabs, FlyoutDrawer
-│   ├── rbac/                # PermissionGate, RoleSelector, UserManagementTable
-│   ├── reports/             # Schedule drift gauge, EVM charts, PDF/Markdown exporters
-│   ├── risks/               # Risk matrix (5x5), blocker drawer, mitigation modal
-│   ├── team/                # Capacity workload heatmap, member availability cards
-│   └── wbs/                 # Hierarchical task tree table, inline cell editors
-├── db/                      # IndexedDB persistent layer
-│   └── projectDB.ts         # Multi-store transactional storage (ClayGanttDB v2)
-├── stores/                  # Global reactive stores
-│   ├── useAuthStore.ts      # Authentication session, tokens, user permissions
-│   └── useProjectStore.ts   # Active project aggregate, undo/redo stack, UI view modes
-├── types/                   # Central domain TypeScript definitions & DTOs
-│   └── index.ts             # Task, Project, TeamMember, Risk, CPM, Enums
-├── utils/                   # Pure utility functions
-│   ├── cpmMath.ts           # Forward/backward pass math, working day calendars
-│   ├── dateUtils.ts         # MENA vs Western calendar calculations, ISO parsers
-│   └── exportUtils.ts       # CSV/JSON/Markdown report formatters
-└── views/                   # Top-level workspace application views
-    ├── ConfigView.tsx       # Working calendar, holiday schedule, RBAC settings
-    ├── DashboardView.tsx    # Executive KPIs, drift gauges, critical path summaries
-    ├── PeopleView.tsx       # Resource directory, skill allocations, capacity balancing
-    └── PlannerView.tsx      # Main WBS spreadsheet + SVG Gantt split-pane canvas
+    Navbar --> Zustand
+    Toolbar --> Zustand
+    SplitPane --> WBSTable
+    SplitPane --> GanttCanvas
+    WBSTable <--> Zustand
+    GanttCanvas <--> Zustand
+    Zustand <--> ApiClient
+    ApiClient <--> API
+    ApiClient <--> Sanctum
 ```
 
 ---
 
-## 2. State Management & Data Layer Architecture
+## 2. Shell & Header Consolidation Architecture
 
-DeliverOps separates **Server Cache State**, **Client UI Session State**, and **Durable Offline State** into distinct tiers to prevent state corruption, race conditions, and uncoordinated re-renders.
+The application eliminates multi-bar clutter by establishing **two unified, high-density header bars**:
 
-### 2.1 State Tiers Matrix
+### 2.1 Primary App Navbar (`Navbar.tsx` - `h-12`)
+A single `h-12` header bar (`px-4`, `bg-white dark:bg-[#11161b]`, `border-b border-slate-200 dark:border-slate-800`):
+1. **Brand Mark**: `CLAYGANTT` logo with sparkle icon and subtle `WBS Matrix` badge.
+2. **Project Switcher Dropdown (`#nav-project-switcher`)**:
+   - Active project code (`MAFI-01`) and project name.
+   - Dropdown displays all tenant projects with task counts, active indicator, `Browse Templates` button, and `Create Blank Project` button.
+3. **Inline Progress Pill**:
+   - Compact `31% Complete` text with a 48px micro progress bar, dynamically recalculating from active deliverables.
+4. **Sliding Segmented Navigation Tabs (`#nav-views-tabs`)**:
+   - `Planner`, `Team's Hub`, `Roles`, `Financials`, `Projects`, `Config`.
+   - Subtle background pill with animated transition.
+5. **System Status Dot**:
+   - `Deliverables System: Active` with green pulsing radar ping.
+6. **3-Way Theme Segmented Toggle**:
+   - `Light` ($\text{Sun}$) \| `Dark` ($\text{Moon}$) \| `Auto` ($\text{Laptop}$).
+7. **Import / Export Menu**:
+   - JSON Backup Import, CSV Spreadsheet Import, Bulk Task Import (Dry-Run), JSON Backup Export, CSV / Excel Export.
+8. **Action Buttons & Tenant Profile**:
+   - Weekly Delivery Report trigger (`#nav-report-btn`), Risk Register trigger (`#nav-risks-btn`), AI Copilot drawer trigger, Command Palette trigger (`⌘K`), Notifications Bell with unread badge, and Tenant Organization avatar flyout.
 
-| State Category | Technology | Scope | Persistence | Invalidation Strategy |
-| :--- | :--- | :--- | :--- | :--- |
-| **Server State** | TanStack Query v5 | Remote database resources (`/api/v1/*`) | Memory cache (staleTime: 30s) | Query key tagging + SSE push mutations |
-| **Client UI State**| Zustand v4 | Active filters, selected rows, zoom levels | Session / Memory | Reset on route change / manual action |
-| **Offline / Draft**| IndexedDB (`ClayGanttDB`) | Uncommitted task drafts, local audit logs | Persistent Disk | Background sync upon network reconnection |
-
-### 2.2 TanStack Query Conventions & Optimistic Mutation Flow
-
-Query keys follow strict hierarchical tuple paths:
-
-```typescript
-// Query Key Factory
-export const projectKeys = {
-  all: ['projects'] as const,
-  lists: () => [...projectKeys.all, 'list'] as const,
-  detail: (id: string) => [...projectKeys.all, 'detail', id] as const,
-  tasks: (projectId: string) => [...projectKeys.detail(projectId), 'tasks'] as const,
-  cpm: (projectId: string) => [...projectKeys.detail(projectId), 'cpm'] as const,
-  risks: (projectId: string) => [...projectKeys.detail(projectId), 'risks'] as const,
-  baselines: (projectId: string) => [...projectKeys.detail(projectId), 'baselines'] as const,
-};
-```
-
-#### Optimistic Task Update with Automatic Rollback on Conflict (HTTP 409)
-When a user resizes or drags a task bar in the Gantt, DeliverOps immediately applies the date changes optimistically. If another team member has already committed an edit (resulting in an optimistic locking `409 Conflict` or CPM cycle `422 Unprocessable Content`), the UI automatically reverts to the previous snapshot:
-
-```typescript
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateTaskApi } from '../api/tasks';
-import { Task, ApiErrorResponse } from '../types';
-import { projectKeys } from '../api/queryKeys';
-import { useToast } from '../components/common/Toast';
-
-export function useOptimisticTaskUpdate(projectId: string) {
-  const queryClient = useQueryClient();
-  const { showToast } = useToast();
-
-  return useMutation({
-    mutationFn: ({ taskId, payload }: { taskId: string; payload: Partial<Task> }) =>
-      updateTaskApi(projectId, taskId, payload),
-
-    // 1. Snapshot previous state before applying mutation
-    onMutate: async ({ taskId, payload }) => {
-      await queryClient.cancelQueries({ queryKey: projectKeys.tasks(projectId) });
-      const previousTasks = queryClient.getQueryData<Task[]>(projectKeys.tasks(projectId));
-
-      // Optimistically update query cache
-      if (previousTasks) {
-        queryClient.setQueryData<Task[]>(projectKeys.tasks(projectId), (old) =>
-          old ? old.map((t) => (t.id === taskId ? { ...t, ...payload } : t)) : []
-        );
-      }
-
-      return { previousTasks };
-    },
-
-    // 2. Rollback on failure (e.g. 409 Version Conflict or 422 CPM Cycle)
-    onError: (err: ApiErrorResponse, variables, context) => {
-      if (context?.previousTasks) {
-        queryClient.setQueryData(projectKeys.tasks(projectId), context.previousTasks);
-      }
-      
-      if (err.status === 409) {
-        showToast({
-          type: 'error',
-          title: 'Concurrency Conflict',
-          message: 'This task was modified by another user. Re-fetching latest project state...',
-        });
-      } else if (err.status === 422 && err.error_code === 'CPM_CYCLE_DETECTED') {
-        showToast({
-          type: 'error',
-          title: 'Circular Dependency Rejected',
-          message: err.message,
-        });
-      }
-      // Re-fetch to ensure server parity
-      queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
-    },
-
-    // 3. Re-sync queries on success
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: projectKeys.tasks(projectId) });
-      queryClient.invalidateQueries({ queryKey: projectKeys.cpm(projectId) });
-    },
-  });
-}
-```
-
-### 2.3 IndexedDB Architecture (`projectDB.ts`)
-The offline and local-first caching tier uses a native multi-store IndexedDB implementation (`ClayGanttDB`, version 2). It provides transactional guarantees across five discrete stores:
-
-1. `projects`: Complete project aggregates including metadata, configuration, and WBS.
-2. `team_members`: Local directory cache of contributors, roles, and skills.
-3. `task_comments`: Unsynced collaborative discussion drafts.
-4. `audit_logs`: Local client-side activity trail for replay and diagnostic export.
-5. `migration_snapshots`: Point-in-time WBS state captures before major structural batch operations.
+### 2.2 Planner Toolbar (`PlannerToolbar.tsx` - `h-11`)
+The secondary control strip dedicated to execution:
+1. **Primary Deliverable Action**:
+   - `+ Add Deliverable` button with keyboard shortcut badge (`Cmd+N` / `Ctrl+N`).
+2. **History Controls**:
+   - `Undo` (`Cmd+Z`) and `Redo` (`Cmd+Shift+Z`) triggers.
+3. **Filter Popover & Quick Search**:
+   - Filter button with dynamic active count badge (`Filter (2)`).
+   - Instant search input filtering deliverables by name, owner, or category.
+4. **Segmented Zoom Scale**:
+   - `Day` (48px/day), `Week` (16px/day), `Month` (4px/day), `Fit` (auto-fit project span).
+5. **Metric Badges**:
+   - `Overdue` pill with alert triangle and overdue deliverable count.
+   - `Critical Path` pill with flame icon and critical deliverable count.
+   - `Locked Baseline` drift pill showing net variance (e.g., `Locked: +4d Drift`).
+6. **Layout Preset Toggle**:
+   - `Grid` (100% WBS Table) \| `50:50` (Split View) \| `Gantt` (100% Timeline Canvas).
+7. **Interactive Resource Capacity Chips**:
+   - Horizontal chips showing engineer names and active load days (`Mohamed Salama 1d`, `M.H. 28d`, `O.H. 98d`, `S.N. 114d`, `Z.H. 65d`). Clicking any chip isolates and filters tasks assigned to that resource.
 
 ---
 
-## 3. SVG Gantt Chart Engine & Virtualization Architecture
+## 3. Split-Pane Workspace & Strict 40px Row Alignment
 
-DeliverOps renders large enterprise schedules (1,000+ tasks) entirely through hardware-accelerated **Scalable Vector Graphics (SVG)**. It avoids DOM bloat and layout thrashing by implementing custom horizontal and vertical virtualization windows.
+### 3.1 Resizable 46/54 Split-Pane (`PlannerView.tsx`)
+- **Default Ratio**: 46% Left WBS Data Grid / 54% Right Gantt Canvas.
+- **6px Interactive Drag Handle**:
+  - Center grip indicator with hover highlight.
+  - Dragging recalculates pane widths in real time.
+  - **Double-Click Reset**: Double-clicking the splitter immediately restores the exact 46% / 54% ratio.
+- **Synchronized Vertical Scrolling**:
+  - Left table scroll container and right Gantt scroll container synchronize their `scrollTop` via passive scroll event listeners, ensuring exact row-to-row alignment at 60 FPS.
 
-```mermaid
-graph LR
-    subgraph Viewport ["Gantt Viewport Canvas (Width: W, Height: H)"]
-        TimelineHeader["Sticky Timeline Header (Days / Weeks / Months)"]
-        subgraph VirtualWindow ["Virtual Window (StartRow to EndRow)"]
-            Row1["Task Row 1: Grid Line + Bar + Dependency Anchors"]
-            Row2["Task Row 2: Milestone Diamond + Float Tail"]
-            Row3["Task Row 3: Ghost Baseline Bar + Critical Path Glow"]
-        end
-        BezierLayer["SVG Dependency Curve Layer (Cubic Bezier Path Links)"]
-    end
-```
+### 3.2 WBS Data Grid ("View at Rest, Edit on Focus") (`WBSTable.tsx` & `WBSRow.tsx`)
+- **Strict 40px Row Height**: Every deliverable row occupies exactly 40px vertical space.
+- **10 Core Columns**:
+  1. `Index / Checkbox (w-10)`: Row numbering and selection.
+  2. `Deliverable Name (min-w-[280px])`:
+     - Circular SVG progress ring (0%–100%) with completion checkmark.
+     - Expand/collapse toggle for parent nodes.
+     - WBS numbering code (`1.0`, `1.1`).
+     - Inline text editing with Esc/Enter commit.
+  3. `Category (w-28)`: Rounded color badge.
+  4. `Priority (w-24)`: Semantic priority pill (`Urgent`, `High`, `Med`, `Low`).
+  5. `Owner / Team (w-36)`: Avatar with primary accountable owner.
+  6. `Schedule Range (w-36)`: Combined start $\rightarrow$ end date format (`04 Oct → 15 Oct`).
+  7. `Duration & Effort (w-24)`: Dual-value cell displaying working calendar days on top and effort hours below (`10d` / `2d eff`).
+  8. `Contextual Actions (Floating Right on Hover)`: Predecessor link trigger, Task details drawer trigger, Delete trigger.
 
-### 3.1 Dual-Axis Virtualization Algorithm
-To achieve a sustained **60 FPS** scroll rate across 1,000+ tasks:
-1. **Vertical Virtualization**: Only task rows intersecting the current vertical scroll window ($Y_{\text{top}} - \text{buffer}$ to $Y_{\text{bottom}} + \text{buffer}$) are rendered to the DOM tree. Standard row height is fixed at $h_{\text{row}} = 36\text{px}$.
-2. **Horizontal Virtualization**: Only dates within the active horizontal scroll window ($X_{\text{left}} - \text{buffer}$ to $X_{\text{right}} + \text{buffer}$) render grid lines and date header labels.
-
-```typescript
-export interface VirtualWindow {
-  startIndex: number;
-  endIndex: number;
-  totalHeight: number;
-  offsetY: number;
-}
-
-export function calculateVerticalVirtualWindow(
-  scrollTop: number,
-  viewportHeight: number,
-  totalItems: number,
-  rowHeight: number = 36,
-  bufferItems: number = 5
-): VirtualWindow {
-  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - bufferItems);
-  const visibleCount = Math.ceil(viewportHeight / rowHeight);
-  const endIndex = Math.min(totalItems - 1, startIndex + visibleCount + (2 * bufferItems));
-  
-  return {
-    startIndex,
-    endIndex,
-    totalHeight: totalItems * rowHeight,
-    offsetY: startIndex * rowHeight,
-  };
-}
-```
-
-### 3.2 Zoom Level Resolutions
-
-DeliverOps supports three dynamic zoom levels with distinct coordinate-to-time mapping:
-
-| Zoom Level | Resolution ($\text{px}/\text{day}$) | Header Granularity | Grid Snapping Rule |
-| :--- | :--- | :--- | :--- |
-| **Day** | $48\text{px}$ | Day number + Day-of-week letter | Snaps to exact day boundary ($00:00:00$) |
-| **Week** | $16\text{px}$ | Calendar Week number (e.g. `W14`) + Month | Snaps to weekly work-start day |
-| **Month** | $4\text{px}$ | Month name (e.g. `Nov 2026`) + Quarter | Snaps to first calendar day of month |
-
-### 3.3 Dependency Curve Rendering (Cubic Bézier)
-Dependency lines between predecessor $P$ and successor $S$ are rendered using cubic Bézier paths (`<path d="..." />`) calculated in SVG viewport space:
-
-$$\mathbf{P}_{\text{start}} = (X_{P,\text{end}}, Y_{P,\text{mid}}), \quad \mathbf{P}_{\text{end}} = (X_{S,\text{start}}, Y_{S,\text{mid}})$$
-
-```typescript
-export function generateDependencyBezierPath(
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number,
-  type: 'FS' | 'SS' | 'FF' = 'FS'
-): string {
-  const arrowBuffer = 12;
-  
-  if (type === 'FS') {
-    if (endX >= startX + (2 * arrowBuffer)) {
-      // Standard forward curve
-      const midX = (startX + endX) / 2;
-      return `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
-    } else {
-      // S-curve wrapping around when successor starts before predecessor finishes
-      const loopOffset = 18;
-      const midY = (startY + endY) / 2;
-      return `M ${startX} ${startY} 
-              L ${startX + loopOffset} ${startY} 
-              C ${startX + loopOffset + 8} ${startY}, ${startX + loopOffset + 8} ${midY}, ${startX + loopOffset} ${midY}
-              L ${endX - loopOffset} ${midY}
-              C ${endX - loopOffset - 8} ${midY}, ${endX - loopOffset - 8} ${endY}, ${endX - loopOffset} ${endY}
-              L ${endX} ${endY}`;
-    }
-  }
-  
-  // Finish-to-Finish or Start-to-Start fallback
-  return `M ${startX} ${startY} L ${endX} ${endY}`;
-}
-```
-
-### 3.4 Visual Style Specifications
-- **Normal Task Bar**: Rounded rect (`rx="4"`), gradient fill (`#3B82F6` to `#2563EB`), height $20\text{px}$, vertical margin $8\text{px}$.
-- **Critical Path Bar**: High-visibility crimson fill (`#EF4444`), neon red drop-shadow filter (`filter="url(#criticalGlow)"`), animated pulsating stroke for active bottlenecks.
-- **Milestone**: 45-degree rotated square (Diamond) centered at date anchor, fill `#8B5CF6`, stroke `#6D28D9`.
-- **Baseline Ghost Bar**: Semi-transparent slate rect (`fill="#64748B" fill-opacity="0.35"`), rendered directly underneath active bar with dashed boundary for immediate variance detection.
-- **Total Float (Slack) Tail**: Dashed horizontal leader line (`stroke="#94A3B8" stroke-dasharray="4,4"`) extending from Early Finish ($EF$) to Late Finish ($LF$).
+### 3.3 Gantt Canvas (`GanttChart.tsx`, `GanttBar.tsx`, `DependencyCurves.tsx`)
+- **Two-Tier Sticky Header (48px)**: Months/Years top tier, Days/Weeks bottom tier with weekend shading (`[5, 6]` MENA or `[0, 6]` Western).
+- **Today Marker**: 2px rose (`#f43f5e`) vertical indicator line crossing all rows with a top date badge.
+- **Sticky Inner Bar Labels**: Labels stay anchored to the visible portion of the bar (`position: sticky; left: 8px`) during horizontal scrolling.
+- **Orthogonal Bezier Dependency Curves**: Smooth SVG vectors connecting predecessor finish edges to successor start edges with arrowheads. Critical path curves glow bright amber/red.
+- **200ms Glassmorphic Hover Card**: Hovering over any Gantt bar reveals deliverable details, dates, duration, progress, assigned owner, and predecessor links after a 200ms debounce.
 
 ---
 
-## 4. Real-Time Synchronization & Collaborative Conflicts
+## 4. State Management Architecture (Zustand 5)
 
-DeliverOps maintains project synchronicity across concurrent distributed planners via **Server-Sent Events (SSE)**.
+State is organized into two primary global stores:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Alice as Planner Alice
-    actor Bob as Planner Bob
-    participant FrontendB as Bob Client (React)
-    participant API as Laravel API Gateway
-    participant Broadcaster as Redis SSE Streamer
+### 4.1 Project & Scheduling Store (`useProjectStore.ts`)
+- **State Properties**:
+  - `projects: Project[]`: Multi-project roster with complete WBS trees, dependencies, baselines, and risks.
+  - `activeProjectId: string`: Currently active project ULID.
+  - `activeView: ActiveView`: `planner` \| `team` \| `roles` \| `financials` \| `dashboard` \| `config` \| `users` \| `create-role`.
+  - `theme: ThemeMode`: `light` \| `dark` \| `system`.
+  - `zoomLevel: number`: Pixel width per day (48, 16, 4).
+  - `teamMembers: TeamMember[]`: Organization engineers with skills, capacity hours, and status.
+- **Persistence & Hydration**:
+  - State partialized and persisted to `localStorage` under `claymorphic_gantt_store_v2`.
+  - Background synchronization with IndexedDB (`ClayGanttDB`) on load.
 
-    Alice->>API: PUT /tasks/TSK-01 (Optimistic lock: v1 -> v2)
-    API->>API: Validate & Commit Transaction
-    API->>Broadcaster: Publish ProjectUpdatedEvent(projectId, taskId, v2)
-    Broadcaster-->>FrontendB: SSE: task.updated { taskId: "TSK-01", version: 2 }
-    
-    Note over FrontendB: Bob is currently editing TSK-01 (Dirty Buffer v1)
-    FrontendB->>FrontendB: Detect version conflict in active buffer
-    FrontendB->>Bob: Display Conflict Banner: "Task modified remotely"
-    Bob->>FrontendB: Clicks "Rebase & Keep My Edits"
-    FrontendB->>API: PUT /tasks/TSK-01 (Using base version v2)
-    API-->>FrontendB: 200 OK (Committed v3)
-```
-
-### 4.1 Event Handlers & TanStack Query Invalidation
-Incoming SSE frames map directly to granular query invalidation commands:
-
-```typescript
-export function initializeProjectEventStream(projectId: string, queryClient: any) {
-  const eventSource = new EventSource(`/api/v1/projects/${projectId}/stream`, {
-    withCredentials: true,
-  });
-
-  eventSource.addEventListener('cpm.recalculated', (e: MessageEvent) => {
-    const data = JSON.parse(e.data);
-    queryClient.setQueryData(projectKeys.cpm(projectId), data.metrics);
-    queryClient.invalidateQueries({ queryKey: projectKeys.tasks(projectId) });
-  });
-
-  eventSource.addEventListener('task.blocked', (e: MessageEvent) => {
-    const data = JSON.parse(e.data);
-    queryClient.invalidateQueries({ queryKey: projectKeys.tasks(projectId) });
-    queryClient.invalidateQueries({ queryKey: projectKeys.risks(projectId) });
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-    // Exponential backoff reconnect
-    setTimeout(() => initializeProjectEventStream(projectId, queryClient), 5000);
-  };
-
-  return () => eventSource.close();
-}
-```
+### 4.2 Authentication & Identity Store (`useAuthStore.ts`)
+- **State Properties**:
+  - `user: ApiUser | null`: Authenticated user profile, roles, permissions, and organization memberships.
+  - `currentOrganization: ApiOrganization | null`: Active tenant workspace context.
+  - `organizations: ApiOrganization[]`: Available tenant workspaces.
+  - `isAuthenticated: boolean`: Authentication state.
+  - `isMfaRequired: boolean`: MFA challenge state.
+- **Persistence & Storage**:
+  - Auth token persisted in `deliverops_auth_token`.
+  - Active organization ULID persisted in `deliverops_current_org_id`.
+  - Cross-tab synchronization via `deliverops_auth_event` storage listener.
 
 ---
 
-## 5. Accessibility (a11y) & WCAG 2.1 AA Compliance
+## 5. Visual Reference Catalogue (33 System Screenshots)
 
-DeliverOps adheres to **WCAG 2.1 AA** standards across all desktop and tablet interfaces.
+All views, tabs, drawers, and modals are verified and catalogued in [`screenshots/`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots):
 
-### 5.1 Keyboard Navigation & Roving Tabindex in Gantt
-Users can navigate the virtualized Gantt canvas and task grid completely without a mouse:
-
-| Key Binding | Target Element | Action Taken |
-| :--- | :--- | :--- |
-| <kbd>Arrow Up</kbd> / <kbd>Arrow Down</kbd> | Task Row | Moves focus to preceding / succeeding task row |
-| <kbd>Arrow Left</kbd> / <kbd>Arrow Right</kbd> | Timeline Bar | Steps task start date by $\pm 1$ working day |
-| <kbd>Shift</kbd> + <kbd>Arrow Right</kbd> | Timeline Bar | Resizes duration by $+1$ working day |
-| <kbd>Shift</kbd> + <kbd>Arrow Left</kbd> | Timeline Bar | Resizes duration by $-1$ working day (min 1 day) |
-| <kbd>Enter</kbd> / <kbd>Space</kbd> | Focused Task | Opens Task Inspector / Detail Drawer |
-| <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Dependency Line | Prompts deletion confirmation for dependency link |
-| <kbd>Escape</kbd> | Modal / Drawer | Dismisses active drawer; restores focus to origin cell |
-
-### 5.2 ARIA Live Regions for Mathematical Engine Announcements
-To inform assistive technologies of dynamic calculations without disrupting navigation, DeliverOps maintains a global polite live region:
-
-```html
-<div 
-  id="a11y-announcer" 
-  aria-live="polite" 
-  aria-atomic="true" 
-  class="sr-only"
->
-  <!-- Dynamically injected: "CPM recalculation complete. Critical path duration: 42 working days. 3 tasks on critical path." -->
-</div>
-```
-
----
-
-## 6. Internationalization (i18n), RTL Layout & MENA Calendar Engine
-
-### 6.1 Bi-Directional (RTL) Layout Implementation
-For Arabic and Hebrew localizations, DeliverOps configures native CSS Logical Properties (`margin-inline-start`, `padding-inline-end`, `inset-inline-start`) and dynamically flips the SVG Gantt time axis.
-
-```typescript
-// Timeline coordinate mapping supporting LTR and RTL
-export function dateToCanvasX(
-  targetDate: string,
-  projectStartDate: string,
-  pxPerDay: number,
-  totalWidth: number,
-  isRtl: boolean = false
-): number {
-  const daysDiff = differenceInCalendarDays(parseISO(targetDate), parseISO(projectStartDate));
-  const ltrX = daysDiff * pxPerDay;
-  
-  // In RTL, the timeline flows from right (X = totalWidth) to left (X = 0)
-  return isRtl ? totalWidth - ltrX : ltrX;
-}
-```
-
-### 6.2 MENA Working Calendar & Statutory Holiday Handling
-The scheduling frontend supports regional working week conventions:
-- **Western Standard**: Working days = Monday through Friday (Weekend: Saturday, Sunday).
-- **MENA Standard (GCC / Levant)**: Working days = Sunday through Thursday (Weekend: Friday, Saturday).
-
-```typescript
-export interface WorkingCalendarConfig {
-  weekendDays: number[]; // e.g. [5, 6] for Friday/Saturday or [0, 6] for Sunday/Saturday
-  holidays: string[];    // Array of ISO dates 'YYYY-MM-DD'
-}
-
-export function isWorkingDay(date: Date, config: WorkingCalendarConfig): boolean {
-  const dayOfWeek = date.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
-  if (config.weekendDays.includes(dayOfWeek)) {
-    return false;
-  }
-  const dateString = date.toISOString().split('T')[0];
-  return !config.holidays.includes(dateString);
-}
-```
-If a user drags a task bar over a Friday or Saturday on a MENA project, the SVG canvas magnetically snaps the bar boundary to Sunday morning ($00:00:00$).
-
----
-
-## 7. Quality Gates & Frontend Verification Matrix
-
-| Area | Target Metric | Verification Method | Enforcement Gate |
-| :--- | :--- | :--- | :--- |
-| **Gantt Rendering** | $\ge 58\text{ FPS}$ with 1,000 tasks | Chrome DevTools Performance Timeline Profiler | Automated Playwright Benchmark |
-| **Bundle Size** | $< 350\text{ KB}$ gzipped (initial chunk) | Rollup Visualizer Bundle Audit | CI GitHub Actions limit check |
-| **Accessibility** | 100% WCAG 2.1 AA pass | Axe-core + Lighthouse Accessibility Audit | Zero violations in CI E2E run |
-| **Type Safety** | 0 `any` types, strict null checks | `tsc --noEmit` | Pre-commit Git Hook + CI Pipeline |
+- [`01_auth_signin_gateway.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/01_auth_signin_gateway.png): Sign-in portal with world map backdrop.
+- [`02_planner_wbs_gantt_split.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/02_planner_wbs_gantt_split.png): 46/54 split-pane workspace with consolidated 2-bar headers.
+- [`03_planner_wbs_full_grid.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/03_planner_wbs_full_grid.png): Full WBS data grid (Grid preset).
+- [`04_planner_gantt_full_timeline.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/04_planner_gantt_full_timeline.png): Full Gantt timeline canvas (Gantt preset).
+- [`05_planner_gantt_bar_hover_card.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/05_planner_gantt_bar_hover_card.png): 200ms glassmorphic hover card & cross-pane row highlight.
+- [`06_planner_task_detail_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/06_planner_task_detail_drawer.png): Slide-out task details & comments drawer.
+- [`07_planner_dark_mode.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/07_planner_dark_mode.png): Full planner workspace in dark mode.
+- [`08_team_hub_capacity_matrix.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/08_team_hub_capacity_matrix.png): Capacity matrix & workload heatmap.
+- [`09_team_hub_members_directory.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/09_team_hub_members_directory.png): Team members directory cards.
+- [`10_team_hub_skills_matrix.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/10_team_hub_skills_matrix.png): Skills matrix table.
+- [`11_team_hub_capacity_forecast.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/11_team_hub_capacity_forecast.png): Capacity forecast chart & hiring recommendations.
+- [`12_team_hub_live_timesheets.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/12_team_hub_live_timesheets.png): Live timesheets grid & hours logging.
+- [`13_team_hub_time_off_calendar.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/13_team_hub_time_off_calendar.png): Time off and leave calendar.
+- [`14_users_management_directory.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/14_users_management_directory.png): Users management directory table.
+- [`15_users_invite_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/15_users_invite_drawer.png): Invite user drawer.
+- [`16_roles_management_overview.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/16_roles_management_overview.png): Roles management table.
+- [`17_roles_create_new_role_matrix.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/17_roles_create_new_role_matrix.png): Create role view with permissions matrix.
+- [`18_financials_budget_invoicing.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/18_financials_budget_invoicing.png): Financials dashboard & SOW milestone invoicing.
+- [`19_projects_portfolio_dashboard.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/19_projects_portfolio_dashboard.png): Projects portfolio hub cards.
+- [`20_config_general_and_calendar.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/20_config_general_and_calendar.png): Config working days & holiday calendar.
+- [`21_config_wbs_categories.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/21_config_wbs_categories.png): Config WBS categories and colors.
+- [`22_config_baseline_management.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/22_config_baseline_management.png): Baseline lock & schedule drift audit.
+- [`23_risk_register_rib_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/23_risk_register_rib_modal.png): Risk, Issue & Blocker register modal.
+- [`24_weekly_delivery_report_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/24_weekly_delivery_report_modal.png): Weekly delivery executive status report modal.
+- [`25_org_settings_general_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/25_org_settings_general_modal.png): Organization settings modal (General tab).
+- [`26_org_settings_members_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/26_org_settings_members_modal.png): Organization members & roles tab.
+- [`27_template_picker_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/27_template_picker_modal.png): Project templates gallery modal.
+- [`28_task_bulk_import_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/28_task_bulk_import_modal.png): Bulk task import dry-run modal.
+- [`29_new_project_creation_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/29_new_project_creation_modal.png): Create blank project modal.
+- [`30_ai_copilot_assistant_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/30_ai_copilot_assistant_drawer.png): AI Project Copilot assistant drawer.
+- [`31_command_palette_modal.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/31_command_palette_modal.png): Command Palette modal (`⌘K`).
+- [`32_notifications_inbox_drawer.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/32_notifications_inbox_drawer.png): Notification center inbox drawer.
+- [`33_first_run_install_view.png`](file:///d:/Sana%20Soft2/PRoject%20Code/Project%20managment/screenshots/33_first_run_install_view.png): System first-run setup view (`/install`).
